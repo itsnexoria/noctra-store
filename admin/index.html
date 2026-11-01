@@ -16,6 +16,7 @@ const db = async (m, q, b) => {
 };
 const get = q => db("GET", q);
 const toast = t => { const e = document.createElement("div"); e.className = "toast"; e.textContent = t; document.body.append(e); setTimeout(() => e.remove(), 2600); };
+const csv = (n, rows) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([rows.map(r => r.map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n")], { type: "text/csv" })); a.download = n; a.click(); };
 const R = v => (v / 100).toFixed(2);
 const pill = s => `<span class="pill ${{ paid: "g", shipped: "g", delivered: "g", fulfilling: "y", pending_payment: "y", needs_attention: "r", failed: "r", cancelled: "r", refunded: "r" }[s] || ""}">${esc(s.replace(/_/g, " "))}</span>`;
 const root = $("#ad");
@@ -30,7 +31,7 @@ function login(msg = "") {
     try { const a = await get("admin_roles?select=role"); if (!a.length) throw 0; shell(); } catch { sessionStorage.removeItem("noctra_at"); tok = ""; login("This account isn't an admin."); }
   };
 }
-const TABS = { overview: "Overview", orders: "Orders", products: "Products", discounts: "Discounts", settings: "Shipping" };
+const TABS = { overview: "Overview", orders: "Orders", products: "Products", blog: "Journal", discounts: "Discounts", waitlist: "Subscribers", settings: "Shipping" };
 function shell() {
   root.innerHTML = `<div class="adm"><aside>${Object.entries(TABS).map(([k, v]) => `<button data-t="${k}" class="${k === tab ? "on" : ""}">${v}</button>`).join("")}<button id="out" style="margin-top:10px">Sign out</button></aside><div id="pn"></div></div>`;
   root.querySelector("aside").onclick = e => { const b = e.target.closest("button"); if (!b) return; if (b.id === "out") { sessionStorage.removeItem("noctra_at"); tok = ""; return login(); } tab = b.dataset.t; sessionStorage.noctra_tab = tab; shell(); };
@@ -40,6 +41,9 @@ const VIEWS = {
   async overview() {
     const o = await get("orders?select=public_ref,email,status,payment_status,total_minor,currency,created_at&order=created_at.desc&limit=500");
     const failed = await get("fulfillment_jobs?select=id&status=eq.failed");
+    const items = await get("order_items?select=product_name,quantity,orders!inner(payment_status)&orders.payment_status=eq.paid&limit=1000").catch(() => []);
+    const top = Object.entries(items.reduce((m, i) => (m[i.product_name] = (m[i.product_name] || 0) + i.quantity, m), {})).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const bySt = Object.entries(o.reduce((m, i) => (m[i.status] = (m[i.status] || 0) + 1, m), {}));
     const paid = o.filter(x => x.payment_status === "paid"), rev = paid.reduce((a, b) => a + b.total_minor, 0);
     const days = [...Array(14)].map((_, i) => { const d = new Date(Date.now() - (13 - i) * 864e5); return { k: d.toISOString().slice(0, 10), l: d.getDate(), v: 0 }; });
     paid.forEach(x => { const d = days.find(d => d.k === x.created_at.slice(0, 10)); if (d) d.v += x.total_minor; });
@@ -47,6 +51,8 @@ const VIEWS = {
     $("#pn").innerHTML = `<div class="stats"><div class="stat"><b>${money(rev)}</b><span>Revenue</span></div><div class="stat"><b>${paid.length}</b><span>Paid orders</span></div>
     <div class="stat"><b>${paid.length ? money(Math.round(rev / paid.length)) : "-"}</b><span>Average order</span></div><div class="stat"><b>${o.filter(x => x.status === "needs_attention").length + failed.length}</b><span>Need attention</span></div></div>
     <div class="panel"><h3>Last 14 days</h3><div class="bars">${days.map(d => `<div title="${money(d.v)}" style="height:${Math.max(3, d.v / mx * 100)}%"></div>`).join("")}</div><div class="bl">${days.map(d => `<span>${d.l}</span>`).join("")}</div></div>
+    <div class="two2"><div class="panel"><h3>Best sellers</h3>${top.length ? top.map(t => `<div class="l" style="display:flex;justify-content:space-between;padding:6px 0"><span>${esc(t[0])}</span><b>${t[1]} sold</b></div>`).join("") : '<p class="note">Sales will show here.</p>'}</div>
+    <div class="panel"><h3>Orders by status</h3>${bySt.length ? bySt.map(t => `<div style="display:flex;justify-content:space-between;padding:6px 0">${pill(t[0])}<b>${t[1]}</b></div>`).join("") : '<p class="note">No orders yet.</p>'}</div></div>
     <div class="panel"><h3>Printify</h3><p class="note">Import products from Printify, and send any paid orders through to production.</p>
     <label class="note">USD to ZAR rate <input class="inp n" id="fx" type="number" step="0.1" value="18.5"></label>
     <p><button class="btn sm" id="sync">Sync products</button> <button class="btn ghost sm" id="run">Send paid orders now</button></p><p id="o2" class="ok" role="status"></p></div>
@@ -56,32 +62,67 @@ const VIEWS = {
     $("#run").onclick = e => go(e.target, { action: "run" }, d => `Submitted ${d.fulfill.submitted}, failed ${d.fulfill.failed}, shipped ${d.track.shipped}.`);
   },
   async orders() {
-    const o = await get("orders?select=id,public_ref,email,status,payment_status,total_minor,currency,created_at,shipping_address,order_note&order=created_at.desc&limit=100");
-    $("#pn").innerHTML = `<div class="panel"><h3>Orders</h3>${ordTable(o, true)}<div id="det"></div></div>`;
+    const o = await get("orders?select=id,public_ref,email,status,payment_status,total_minor,currency,created_at,shipping_address,order_note&order=created_at.desc&limit=500");
+    let f = "", q = "";
+    const rows = () => o.map((x, i) => [x, i]).filter(([x]) => (!f || x.status === f) && (!q || (x.public_ref + x.email).toLowerCase().includes(q)));
+    $("#pn").innerHTML = `<div class="panel"><h3>Orders</h3><p style="display:flex;gap:10px;flex-wrap:wrap"><input class="inp" id="q" placeholder="Search ref or email" style="flex:1;min-width:200px"><select class="inp" id="fs"><option value="">All statuses</option>${[...new Set(o.map(x => x.status))].map(s => `<option>${s}</option>`).join("")}</select><button class="btn ghost sm" id="csv">Export CSV</button></p><div id="tb"></div><div id="det"></div></div>`;
+    const draw = () => { const r = rows(); $("#tb").innerHTML = r.length ? `<table><tr><th>Ref</th><th>Email</th><th>Status</th><th>Total</th><th>Date</th></tr>${r.map(([x, i]) => `<tr class="cl" data-i="${i}"><td>${esc(x.public_ref)}</td><td>${esc(x.email)}</td><td>${pill(x.status)}</td><td>${money(x.total_minor, x.currency)}</td><td>${new Date(x.created_at).toLocaleDateString()}</td></tr>`).join("")}</table>` : '<p class="note">No matching orders.</p>'; };
+    draw();
+    $("#q").oninput = e => { q = e.target.value.toLowerCase(); draw(); }; $("#fs").onchange = e => { f = e.target.value; draw(); };
+    $("#csv").onclick = () => csv("orders.csv", [["ref", "email", "status", "payment", "total", "currency", "date"], ...rows().map(([x]) => [x.public_ref, x.email, x.status, x.payment_status, R(x.total_minor), x.currency, x.created_at])]);
     $("#pn").onclick = async e => {
       const tr = e.target.closest("tr[data-i]"); if (!tr) return; const x = o[+tr.dataset.i];
       const [it, tk] = await Promise.all([get(`order_items?select=product_name,variant_title,quantity,line_total_minor&order_id=eq.${x.id}`), get(`tracking_events?select=carrier,tracking_number,tracking_url&order_id=eq.${x.id}`)]);
       const a = x.shipping_address || {};
-      $("#det").innerHTML = `<div class="sum" style="margin-top:20px"><h3>${esc(x.public_ref)} ${pill(x.status)}</h3><p class="note">${esc(x.email)}<br>${esc(a.name)}, ${esc(a.line1)} ${esc(a.line2 || "")}, ${esc(a.city)} ${esc(a.region || "")} ${esc(a.postal)}, ${esc(a.country)} ${esc(a.phone || "")}${x.order_note ? "<br>Note: " + esc(x.order_note) : ""}</p>
+      $("#det").innerHTML = `<div class="sum" style="margin-top:20px"><h3>${esc(x.public_ref)} ${pill(x.status)} ${pill(x.payment_status)}</h3><p class="note">${esc(x.email)}<br>${esc(a.name)}, ${esc(a.line1)} ${esc(a.line2 || "")}, ${esc(a.city)} ${esc(a.region || "")} ${esc(a.postal)}, ${esc(a.country)} ${esc(a.phone || "")}${x.order_note ? "<br>Note: " + esc(x.order_note) : ""}</p>
       ${it.map(i => `<div class="l"><span>${esc(i.product_name)} (${esc(i.variant_title)}) x ${i.quantity}</span><span>${money(i.line_total_minor, x.currency)}</span></div>`).join("")}<div class="l t"><span>Total</span><span>${money(x.total_minor, x.currency)}</span></div>
       ${tk.map(t => `<p class="note">${esc(t.carrier || "")} ${t.tracking_url ? `<a class="link" href="${esc(t.tracking_url)}" target="_blank" rel="noopener">${esc(t.tracking_number || "track")}</a>` : esc(t.tracking_number || "")}</p>`).join("")}</div>`;
       $("#det").scrollIntoView({ behavior: "smooth" });
     };
   },
   async products() {
-    const p = await get("products?select=id,name,status,product_images(url,sort),product_variants(id,title,price_minor,active)&order=created_at.desc&limit=200");
-    $("#pn").innerHTML = `<div class="panel"><h3>Products</h3>${p.length ? p.map(x => { const im = [...x.product_images].sort((a, b) => a.sort - b.sort)[0]; return `<div class="prod"><img src="${esc(im?.url || "")}" alt=""><div><b>${esc(x.name)}</b><div class="note">${x.product_variants.length} variants <button class="link" data-v="${x.id}">Edit prices</button></div></div>
+    const p = await get("products?select=id,name,description,fit_notes,status,product_images(url,sort),product_variants(id,title,price_minor,active)&order=created_at.desc&limit=200");
+    $("#pn").innerHTML = `<div class="panel"><h3>Products</h3><p style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><input class="inp" id="mk" type="number" placeholder="Raise all prices by %" style="width:200px"><button class="btn ghost sm" id="mkb">Apply to all</button></p>${p.length ? p.map(x => { const im = [...x.product_images].sort((a, b) => a.sort - b.sort)[0]; return `<div class="prod"><img src="${esc(im?.url || "")}" alt=""><div><b>${esc(x.name)}</b><div class="note">${x.product_variants.length} variants <button class="link" data-v="${x.id}">Prices</button> <button class="link" data-d="${x.id}">Details</button></div></div>
       <select class="inp" data-s="${x.id}">${["published", "draft", "archived"].map(s => `<option ${s === x.status ? "selected" : ""}>${s}</option>`).join("")}</select>
+      <div class="vrows" id="d${x.id}" hidden><input class="inp" data-f="name" data-id="${x.id}" value="${esc(x.name)}"><textarea rows="4" data-f="description" data-id="${x.id}">${esc(x.description)}</textarea><input class="inp" data-f="fit_notes" data-id="${x.id}" placeholder="Fit notes (optional)" value="${esc(x.fit_notes)}"></div>
       <div class="vrows" id="v${x.id}" hidden>${x.product_variants.map(v => `<div><span>${esc(v.title)}</span>R <input class="inp n" type="number" step="1" min="0" value="${R(v.price_minor)}" data-p="${v.id}"><label class="note"><input type="checkbox" data-a="${v.id}" ${v.active ? "checked" : ""}> on sale</label></div>`).join("")}</div></div>`; }).join("") : '<p class="note">No products yet. Sync from Printify on the Overview tab.</p>'}</div>`;
     const pn = $("#pn");
-    pn.onclick = e => { const b = e.target.closest("[data-v]"); if (b) { const r = $("#v" + b.dataset.v); r.hidden = !r.hidden; } };
+    pn.onclick = async e => { const b = e.target.closest("[data-v],[data-d]"); if (b) { const r = $((b.dataset.v ? "#v" : "#d") + (b.dataset.v || b.dataset.d)); r.hidden = !r.hidden; }
+      if (e.target.id === "mkb") { const pc = +$("#mk").value; if (!pc || !confirm(`Change every price by ${pc}%?`)) return;
+        try { for (const x of p) for (const v of x.product_variants) await db("PATCH", `product_variants?id=eq.${v.id}`, { price_minor: Math.max(500, Math.round(v.price_minor * (1 + pc / 100) / 500) * 500) }); toast("Prices updated"); shell(); } catch { toast("Could not update"); } } };
     pn.onchange = async e => { const t = e.target;
       try {
         if (t.dataset.s) await db("PATCH", `products?id=eq.${t.dataset.s}`, { status: t.value });
+        else if (t.dataset.f) await db("PATCH", `products?id=eq.${t.dataset.id}`, { [t.dataset.f]: t.value });
         else if (t.dataset.p) await db("PATCH", `product_variants?id=eq.${t.dataset.p}`, { price_minor: Math.round(+t.value * 100) });
         else if (t.dataset.a) await db("PATCH", `product_variants?id=eq.${t.dataset.a}`, { active: t.checked });
         toast("Saved");
       } catch { toast("Could not save"); } };
+  },
+  async blog() {
+    const ps = await get("posts?select=*&order=created_at.desc"); let p = {};
+    const slug = s => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+    const draw = () => { $("#pn").innerHTML = `<div class="panel"><h3>${p.id ? "Edit post" : "New post"}</h3><form class="f" id="pf"><label class="full">Title<input name="title" required maxlength="160" value="${esc(p.title || "")}"></label>
+      <label>Web address<input name="slug" required value="${esc(p.slug || "")}"></label><label>Cover image URL (optional)<input name="cover" value="${esc(p.cover_url || "")}" placeholder="https://..."></label>
+      <label class="full">Short summary<input name="excerpt" maxlength="300" value="${esc(p.excerpt || "")}"></label>
+      <label class="full">Post<textarea name="body" rows="18">${esc(p.body || "")}</textarea></label>
+      <p class="note full">Formatting: ## Heading, **bold**, *italic*, [text](https://link), - list item, ![alt](https://image-url). Leave a blank line between paragraphs.</p>
+      <label class="note"><input type="checkbox" name="pub" ${p.published ? "checked" : ""}> Published</label>
+      <div class="full"><button class="btn sm">Save post</button> <button type="button" class="btn ghost sm" id="nw">New post</button> ${p.id ? '<button type="button" class="btn ghost sm" id="del">Delete</button>' : ""} <span id="bm" class="err"></span></div></form></div>
+      <div class="panel"><h3>All posts</h3>${ps.length ? `<table><tr><th>Title</th><th>Status</th><th></th></tr>${ps.map((x, i) => `<tr><td>${esc(x.title)}</td><td>${x.published ? pill("published") : pill("draft")}</td><td><button class="link" data-e="${i}">Edit</button> ${x.published ? `<a class="link" href="/blog/post/?s=${esc(x.slug)}" target="_blank">View</a>` : ""}</td></tr>`).join("")}</table>` : '<p class="note">No posts yet.</p>'}</div>`;
+      const f = $("#pf"); if (!p.id) f.title.oninput = () => f.slug.value = slug(f.title.value);
+      $("#nw").onclick = () => { p = {}; draw(); };
+      if ($("#del")) $("#del").onclick = async () => { if (confirm("Delete this post?")) { await db("DELETE", `posts?id=eq.${p.id}`); toast("Deleted"); shell(); } };
+      f.onsubmit = async e => { e.preventDefault(); const v = Object.fromEntries(new FormData(f)), pub = !!v.pub;
+        const row = { title: v.title.trim(), slug: slug(v.slug), excerpt: v.excerpt.trim(), cover_url: v.cover.trim() || null, body: v.body, published: pub, published_at: pub ? (p.published_at || new Date().toISOString()) : null, updated_at: new Date().toISOString() };
+        try { await (p.id ? db("PATCH", `posts?id=eq.${p.id}`, row) : db("POST", "posts", row)); toast("Post saved"); shell(); } catch { $("#bm").textContent = "Could not save. Check the web address is unique and any image link starts with https://"; } };
+      $("#pn").querySelectorAll("[data-e]").forEach(b => b.onclick = () => { p = ps[+b.dataset.e]; draw(); window.scrollTo({ top: 0, behavior: "smooth" }); }); };
+    draw();
+  },
+  async waitlist() {
+    const w = await get("waitlist?select=email,source,created_at&order=created_at.desc&limit=1000");
+    $("#pn").innerHTML = `<div class="panel"><h3>Subscribers (${w.length})</h3><p><button class="btn ghost sm" id="csv">Export CSV</button></p>${w.length ? `<table><tr><th>Email</th><th>From</th><th>Date</th></tr>${w.map(x => `<tr><td>${esc(x.email)}</td><td>${esc(x.source)}</td><td>${new Date(x.created_at).toLocaleDateString()}</td></tr>`).join("")}</table>` : '<p class="note">No sign-ups yet.</p>'}</div>`;
+    $("#csv").onclick = () => csv("subscribers.csv", [["email", "source", "date"], ...w.map(x => [x.email, x.source, x.created_at])]);
   },
   async discounts() {
     const d = await get("discount_codes?select=*&order=created_at.desc");

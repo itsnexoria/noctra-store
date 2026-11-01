@@ -6,25 +6,44 @@
 <link rel="stylesheet" href="/assets/site.css"></head><body><div id="hdr"></div><main id="main"><svg width="0" height="0" style="position:absolute"><defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6e3a1"/><stop offset="1" stop-color="#b8912f"/></linearGradient></defs></svg>
 <section class="hero"><div><h1>Dressed for <em>after dark.</em></h1>
 <p class="lead">Premium prints, made to order and delivered to your door.</p>
-<div class="acts"><a class="btn" href="/shop/">Shop the collection</a><a class="btn ghost" href="/about/">Our story</a></div></div>
-<div class="art"><i></i><i></i><span id="art" style="display:contents"></span></div></section>
+<div class="acts"><a class="btn" href="/shop/">Shop the collection</a><a class="btn ghost" href="/blog/">Read the journal</a></div>
+<div class="trust" id="trust"></div></div>
+<div class="art"><i></i><i></i>
+<svg class="moon" viewBox="0 0 100 100" aria-hidden="true"><path d="M62 8a44 44 0 1 0 30 70A38 38 0 0 1 62 8z" fill="url(#gg)"/></svg>
+<a class="arch" id="arch" href="/shop/"><span id="art" style="display:contents"></span></a>
+<div class="tag t1" id="t1" hidden></div><div class="tag t2" hidden id="t2"><b>Made to order</b>Printed just for you</div></div></section>
 <div class="marq" id="mq" aria-hidden="true"></div>
 <section class="sec"><div class="hd"><h2>New arrivals</h2><a class="link" href="/shop/">View all</a></div><div class="grid" id="grid"></div></section>
 <section><div class="facts"><div id="f1"><h3>Made to order</h3><p>Nothing sits on a shelf. Your piece is printed after you order it.</p></div>
 <div id="f2"><h3>Delivered worldwide</h3><p>Tracked shipping to the countries listed at checkout.</p></div>
 <div id="f3"><h3>Secure checkout</h3><p>Pay in rand with cards and local methods through Paystack.</p></div></div></section>
+<section class="sec"><div class="hd"><h2>From the journal</h2><a class="link" href="/blog/">All posts</a></div><div class="bgrid" id="posts"></div></section>
 <section><div class="cta"><h2>Be first to the next drop.</h2><p class="note">New pieces, early access and nothing else.</p><span id="cta"></span></div></section>
 </main><div id="ftr"></div><script type="module">
 import {chrome} from "/assets/app.js"; chrome();
 
-import {rest,card,LIST,emptyShelf,waitlistForm,star,$} from "/assets/app.js";
+import {rest,card,LIST,emptyShelf,waitlistForm,star,money,esc,$} from "/assets/app.js";
 $("#art").innerHTML = star;
 ["f1","f2","f3"].forEach(i => $("#"+i).insertAdjacentHTML("afterbegin", star));
+$("#trust").innerHTML = ["Made to order","Worldwide shipping","Secure checkout"].map(t => `<span>${star}${t}</span>`).join("");
 const words = ["Made to order","Shipped worldwide","Premium prints","Dressed for after dark"];
 const run = words.map(w => `<span>${star}${w}</span>`).join("").repeat(4);
 $("#mq").innerHTML = `<div>${run}${run}</div>`;
 $("#cta").innerHTML = waitlistForm("cta");
-try { const p = await rest(LIST + "&limit=8"); $("#grid").innerHTML = p.length ? p.map(card).join("") : emptyShelf(); }
-catch { $("#grid").innerHTML = emptyShelf(); }
+try {
+  const p = await rest(LIST + "&limit=8");
+  $("#grid").innerHTML = p.length ? p.map(card).join("") : emptyShelf();
+  const f = p.find(x => x.product_images?.length && x.product_variants?.some(v => v.active));
+  if (f) {
+    const im = [...f.product_images].sort((a, b) => a.sort - b.sort)[0], pr = Math.min(...f.product_variants.filter(v => v.active).map(v => v.price_minor));
+    $("#arch").href = "/product/?s=" + encodeURIComponent(f.slug); $("#arch").innerHTML = `<img src="${esc(im.url)}" alt="${esc(f.name)}">`;
+    $("#t1").innerHTML = `<b>${esc(f.name)}</b>From ${money(pr, f.currency)}`; $("#t1").hidden = false; $("#t2").hidden = false;
+  }
+} catch { $("#grid").innerHTML = emptyShelf(); }
+try {
+  const b = await rest("posts?select=slug,title,excerpt,cover_url&published=eq.true&order=published_at.desc&limit=3");
+  if (b.length) $("#posts").innerHTML = b.map(bcard).join(""); else $("#posts").closest("section").remove();
+} catch { $("#posts").closest("section").remove(); }
+function bcard(p) { return `<a class="bcard" href="/blog/post/?s=${encodeURIComponent(p.slug)}"><div class="ph">${p.cover_url ? `<img src="${esc(p.cover_url)}" alt="" loading="lazy">` : star}</div><h3>${esc(p.title)}</h3><p>${esc(p.excerpt)}</p></a>`; }
 
 </script></body></html>

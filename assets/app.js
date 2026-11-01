@@ -1,4 +1,4 @@
-import { SB, KEY } from "/assets/config.js";
+import { SB, KEY, CONTACT_EMAIL, BUSINESS_NAME, BUSINESS_ADDRESS } from "/assets/config.js";
 export const $ = (s, r = document) => r.querySelector(s);
 export const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 export const money = (m, c = "ZAR") => new Intl.NumberFormat("en-ZA", { style: "currency", currency: c }).format(m / 100);
@@ -27,11 +27,14 @@ function badge() { const n = getCart().reduce((a, b) => a + b.qty, 0); document.
 export const wordmark = '<span class="wm">N<span class="o">o' + STAR + '</span>ctra</span>';
 export function chrome() {
   $("#hdr").innerHTML = `<header class="top"><a href="/" aria-label="Noctra home">${wordmark}</a>
-  <nav><a href="/shop/">Shop</a><a href="/about/">About</a><a href="/cart/" class="bag">Bag <b class="cc" hidden>0</b></a></nav></header>`;
+  <nav><a href="/shop/">Shop</a><a href="/blog/">Journal</a><a href="/about/">About</a><a href="/cart/" class="bag">Bag <b class="cc" hidden>0</b></a></nav></header>`;
   $("#ftr").innerHTML = `<footer class="foot"><div>${wordmark}<p>Premium prints, made to order and shipped worldwide.</p></div>
-  <div><b>Explore</b><a href="/shop/">Shop</a><a href="/about/">About &amp; shipping</a><a href="/cart/">Your bag</a></div>
+  <div><b>Explore</b><a href="/shop/">Shop</a><a href="/blog/">Journal</a><a href="/about/">About</a><a href="/contact/">Contact</a></div>
+  <div><b>Policies</b><a href="/shipping/">Shipping</a><a href="/refunds/">Refunds &amp; returns</a><a href="/terms/">Terms of service</a><a href="/privacy/">Privacy policy</a></div>
   <div><b>Stay in the loop</b>${waitlistForm("footer")}</div>
-  <p class="fine">&copy; ${new Date().getFullYear()} Noctra. All rights reserved.</p></footer>`;
+  <p class="fine">&copy; ${new Date().getFullYear()} ${esc(BUSINESS_NAME)}. All rights reserved.</p></footer>`;
+  document.querySelectorAll("[data-email]").forEach(e => e.innerHTML = CONTACT_EMAIL ? `<a class="link" href="mailto:${esc(CONTACT_EMAIL)}">${esc(CONTACT_EMAIL)}</a>` : "our support email");
+  document.querySelectorAll("[data-biz]").forEach(e => e.textContent = BUSINESS_NAME + (BUSINESS_ADDRESS ? ", " + BUSINESS_ADDRESS : ""));
   badge();
 }
 export const card = p => {
@@ -56,3 +59,13 @@ document.addEventListener("submit", async e => {
     m.textContent = r.ok || r.status === 409 ? "You're on the list." : "Something went wrong. Please try again.";
   } catch { m.textContent = "Something went wrong. Please try again."; }
 });
+
+export function md(src) {
+  const inl = t => esc(t).replace(/!\[([^\]]*)\]\((https:\/\/[^\s)]+)\)/g, '<img src="$2" alt="$1" loading="lazy">')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/[^\s)]*)\)/g, '<a href="$2" rel="noopener">$1</a>')
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\*([^*]+)\*/g, "<i>$1</i>");
+  return String(src || "").split(/\n{2,}/).map(b => { b = b.trim(); if (!b) return ""; let m;
+    if ((m = b.match(/^(#{1,3})\s+(.*)$/))) return `<h${m[1].length + 1}>${inl(m[2])}</h${m[1].length + 1}>`;
+    if (/^[-*]\s/.test(b)) return "<ul>" + b.split("\n").map(l => `<li>${inl(l.replace(/^[-*]\s+/, ""))}</li>`).join("") + "</ul>";
+    return `<p>${inl(b).replace(/\n/g, "<br>")}</p>`; }).join("");
+}
