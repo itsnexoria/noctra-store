@@ -1,11 +1,11 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Noctra | Premium prints, made to order</title><meta name="description" content="Premium made-to-order apparel and prints by Noctra, shipped worldwide."><meta name="theme-color" content="#0b0614">
+<title>Noctra | Christian apparel, made to order</title><meta name="description" content="Faith-inspired Christian apparel by Noctra, made to order and shipped worldwide."><meta name="theme-color" content="#0b0614">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/site.css"></head><body><div id="hdr"></div><main id="main"><svg width="0" height="0" style="position:absolute"><defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6e3a1"/><stop offset="1" stop-color="#b8912f"/></linearGradient></defs></svg>
-<section class="hero"><div><h1>Dressed for <em>after dark.</em></h1>
-<p class="lead">Premium prints, made to order and delivered to your door.</p>
+<section class="hero"><div><h1>Wear your faith <em>boldly.</em></h1>
+<p class="lead">Christian apparel with quiet confidence. Made to order and delivered to your door.</p>
 <div class="acts"><a class="btn" href="/shop/">Shop the collection</a><a class="btn ghost" href="/blog/">Read the journal</a></div>
 <div class="trust" id="trust"></div></div>
 <div class="art"><i></i><i></i>
@@ -22,11 +22,11 @@
 </main><div id="ftr"></div><script type="module">
 import {chrome} from "/assets/app.js"; chrome();
 
-import {rest,card,LIST,emptyShelf,waitlistForm,star,money,esc,$} from "/assets/app.js";
-$("#art").innerHTML = star;
+import {rest,card,LIST,emptyShelf,waitlistForm,star,cross,money,esc,$} from "/assets/app.js";
+$("#art").innerHTML = cross;
 ["f1","f2","f3"].forEach(i => $("#"+i).insertAdjacentHTML("afterbegin", star));
 $("#trust").innerHTML = ["Made to order","Worldwide shipping","Secure checkout"].map(t => `<span>${star}${t}</span>`).join("");
-const words = ["Made to order","Shipped worldwide","Premium prints","Dressed for after dark"];
+const words = ["Faith over fear","Light in the dark","Made to order","Shipped worldwide"];
 const run = words.map(w => `<span>${star}${w}</span>`).join("").repeat(4);
 $("#mq").innerHTML = `<div>${run}${run}</div>`;
 $("#cta").innerHTML = waitlistForm("cta");

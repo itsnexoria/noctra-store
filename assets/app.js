@@ -4,6 +4,7 @@ export const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;"
 export const money = (m, c = "ZAR") => new Intl.NumberFormat("en-ZA", { style: "currency", currency: c }).format(m / 100);
 const STAR = '<svg viewBox="0 0 100 100" aria-hidden="true"><path d="M50 0C54 34 66 46 100 50 66 54 54 66 50 100 46 66 34 54 0 50 34 46 46 34 50 0z"/></svg>';
 export const star = STAR;
+export const cross = '<svg viewBox="0 0 100 100" aria-hidden="true"><path d="M43 4h14v32h30v14H57v46H43V50H13V36h30z"/></svg>';
 
 export async function rest(q, tok) {
   const r = await fetch(`${SB}/rest/v1/${q}`, { headers: { apikey: KEY, ...(tok ? { Authorization: "Bearer " + tok } : {}) } });
@@ -28,14 +29,14 @@ export const wordmark = '<span class="wm">N<span class="o">o' + STAR + '</span>c
 export function chrome() {
   $("#hdr").innerHTML = `<header class="top"><a href="/" aria-label="Noctra home">${wordmark}</a>
   <nav><a href="/shop/">Shop</a><a href="/blog/">Journal</a><a href="/about/">About</a><a href="/cart/" class="bag">Bag <b class="cc" hidden>0</b></a></nav></header>`;
-  $("#ftr").innerHTML = `<footer class="foot"><div>${wordmark}<p>Premium prints, made to order and shipped worldwide.</p></div>
+  $("#ftr").innerHTML = `<footer class="foot"><div>${wordmark}<p>Christian apparel, made to order and shipped worldwide.</p></div>
   <div><b>Explore</b><a href="/shop/">Shop</a><a href="/blog/">Journal</a><a href="/about/">About</a><a href="/contact/">Contact</a></div>
   <div><b>Policies</b><a href="/shipping/">Shipping</a><a href="/refunds/">Refunds &amp; returns</a><a href="/terms/">Terms of service</a><a href="/privacy/">Privacy policy</a></div>
   <div><b>Stay in the loop</b>${waitlistForm("footer")}</div>
   <p class="fine">&copy; ${new Date().getFullYear()} ${esc(BUSINESS_NAME)}. All rights reserved.</p></footer>`;
   document.querySelectorAll("[data-email]").forEach(e => e.innerHTML = CONTACT_EMAIL ? `<a class="link" href="mailto:${esc(CONTACT_EMAIL)}">${esc(CONTACT_EMAIL)}</a>` : "our support email");
   document.querySelectorAll("[data-biz]").forEach(e => e.textContent = BUSINESS_NAME + (BUSINESS_ADDRESS ? ", " + BUSINESS_ADDRESS : ""));
-  badge();
+  badge(); cursor();
 }
 export const card = p => {
   const im = [...(p.product_images || [])].sort((a, b) => a.sort - b.sort)[0];
@@ -68,4 +69,20 @@ export function md(src) {
     if ((m = b.match(/^(#{1,3})\s+(.*)$/))) return `<h${m[1].length + 1}>${inl(m[2])}</h${m[1].length + 1}>`;
     if (/^[-*]\s/.test(b)) return "<ul>" + b.split("\n").map(l => `<li>${inl(l.replace(/^[-*]\s+/, ""))}</li>`).join("") + "</ul>";
     return `<p>${inl(b).replace(/\n/g, "<br>")}</p>`; }).join("");
+}
+
+function cursor() {
+  if (!matchMedia("(hover:hover) and (pointer:fine)").matches || matchMedia("(prefers-reduced-motion:reduce)").matches || document.querySelector(".cur-dot")) return;
+  const d = document.createElement("div"), r = document.createElement("div"), h = document.documentElement;
+  d.className = "cur-dot"; r.className = "cur-ring"; d.innerHTML = STAR; document.body.append(r, d); h.classList.add("cur");
+  let x = -100, y = -100, rx = -100, ry = -100;
+  addEventListener("mousemove", e => {
+    x = e.clientX; y = e.clientY; d.style.transform = `translate(${x}px,${y}px) translate(-50%,-50%)`;
+    r.classList.toggle("hot", !!e.target.closest("a,button,select,label,.card,.opt,.chip,tr.cl"));
+    h.classList.toggle("txt", !!e.target.closest("input,textarea"));
+  }, { passive: true });
+  document.addEventListener("mouseleave", () => { d.style.opacity = 0; r.style.opacity = 0; });
+  document.addEventListener("mouseenter", () => { d.style.opacity = ""; r.style.opacity = ""; });
+  addEventListener("mousedown", () => r.classList.add("dn")); addEventListener("mouseup", () => r.classList.remove("dn"));
+  (function loop() { rx += (x - rx) * .18; ry += (y - ry) * .18; r.style.transform = `translate(${rx}px,${ry}px) translate(-50%,-50%)`; requestAnimationFrame(loop); })();
 }

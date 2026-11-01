@@ -3,3 +3,5 @@ Allow: /
 Disallow: /admin/
 Disallow: /checkout/
 Disallow: /order/
+
+Sitemap: https://nexorealm.org/sitemap.xml
