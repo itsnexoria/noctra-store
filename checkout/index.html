@@ -1,0 +1,53 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Checkout | Noctra</title><meta name="description" content="Secure checkout."><meta name="theme-color" content="#0f0819">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css"><meta name="robots" content="noindex"></head><body><div id="hdr"></div><main id="main">
+<section class="pg"><h2>Checkout</h2><div class="two" style="padding-top:10px"><form class="f" id="form" autocomplete="on">
+<h3>Contact</h3><label class="full">Email<input name="email" type="email" required autocomplete="email"></label>
+<h3>Delivery</h3><label class="full">Full name<input name="name" required autocomplete="name"></label>
+<label class="full">Address<input name="line1" required autocomplete="address-line1"></label>
+<label class="full">Apartment, suite (optional)<input name="line2" autocomplete="address-line2"></label>
+<label>City<input name="city" required autocomplete="address-level2"></label><label>State / province<input name="region" autocomplete="address-level1"></label>
+<label>Postal code<input name="postal" required autocomplete="postal-code"></label><label>Country<select name="country" id="country" required></select></label>
+<label class="full">Phone<input name="phone" type="tel" autocomplete="tel"></label>
+<label class="full">Discount code (optional)<span style="display:flex;gap:8px"><input name="code" id="code" style="flex:1;text-transform:uppercase"><button type="button" class="btn ghost" id="apply">Apply</button></span></label>
+<div class="full"><p class="err" id="err" role="alert"></p><button class="btn" id="pay" style="width:100%">Pay securely</button></div></form>
+<div class="sum" id="sum"></div></div></section></main><div id="ftr"></div><script type="module">
+import {chrome} from "/assets/app.js"; chrome();
+
+import {getCart,money,api,rest,esc,$} from "/assets/app.js";
+const cart = getCart();
+if (!cart.length) location.replace("/cart/");
+const items = cart.map(i => ({ variantId: i.id, qty: i.qty }));
+const cur = cart[0]?.cur || "ZAR";
+let key = crypto.randomUUID();
+const NAMES = { ZA: "South Africa", US: "United States", CA: "Canada", GB: "United Kingdom", IE: "Ireland", AU: "Australia", NZ: "New Zealand", DE: "Germany", FR: "France", NL: "Netherlands" };
+try {
+  const [s] = await rest("site_settings?key=eq.shipping&select=value");
+  const cs = Object.keys(s.value.countries);
+  $("#country").innerHTML = '<option value="">Select country</option>' + cs.map(c => `<option value="${c}">${NAMES[c] || new Intl.DisplayNames(["en"], { type: "region" }).of(c)}</option>`).join("");
+} catch { $("#err").textContent = "Could not load shipping options. Please refresh."; }
+const MSG = { country_not_supported: "We don't ship to that country yet.", item_unavailable: "An item in your bag is no longer available. Remove it from your bag and try again.", item_not_orderable: "An item in your bag can't be ordered right now. Please contact us.", invalid_code: "That discount code isn't valid.", payment_unavailable: "Payment is unavailable right now. Please try again in a moment.", rate_limited: "Too many attempts. Please wait a few minutes.", invalid_email: "Please enter a valid email address.", invalid_address: "Please check your delivery details.", shipping_not_configured: "Shipping isn't set up yet. Please check back soon.", not_configured: "Checkout isn't switched on yet. Please check back soon." };
+const say = e => $("#err").textContent = MSG[e.code] || "Something went wrong. Please try again.";
+const draw = q => { $("#sum").innerHTML = `<h3>Order summary</h3>${cart.map(i => `<div class="l"><span>${esc(i.name)} (${esc(i.title)}) x ${i.qty}</span><span>${money(i.price * i.qty, i.cur)}</span></div>`).join("")}
+  ${q ? `<div class="l"><span>Shipping</span><span>${money(q.shippingMinor, q.currency)}</span></div>${q.discountMinor ? `<div class="l"><span>Discount</span><span>-${money(q.discountMinor, q.currency)}</span></div>` : ""}<div class="l t"><span>Total</span><span>${money(q.totalMinor, q.currency)}</span></div>` : '<p class="note">Choose a country to see shipping and your total.</p>'}`; };
+draw();
+async function quote() {
+  const country = $("#country").value, discountCode = $("#code").value.trim().toUpperCase(); $("#err").textContent = "";
+  if (!country) return draw();
+  try { draw(await api("quote", { items, country, discountCode })); } catch (e) { say(e); draw(); }
+}
+$("#country").onchange = quote; $("#apply").onclick = quote;
+$("#form").onsubmit = async e => {
+  e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); $("#pay").disabled = true; $("#err").textContent = "";
+  try {
+    const d = await api("checkout", { items, email: f.email, idempotencyKey: key, discountCode: (f.code || "").trim().toUpperCase(),
+      address: { name: f.name, line1: f.line1, line2: f.line2 || "", city: f.city, region: f.region || "", postal: f.postal, country: f.country, phone: f.phone || "" } });
+    const o = JSON.parse(localStorage.noctra_orders || "{}"); o[d.publicRef] = d.token; localStorage.noctra_orders = JSON.stringify(o);
+    location.href = d.authorizationUrl || `/order/?ref=${d.publicRef}`;
+  } catch (er) { if (er.code === "idempotency_conflict") key = crypto.randomUUID(); say(er); $("#pay").disabled = false; }
+};
+
+</script></body></html>

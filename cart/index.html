@@ -1,0 +1,26 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Your bag | Noctra</title><meta name="description" content="Review your bag."><meta name="theme-color" content="#0f0819">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css"></head><body><div id="hdr"></div><main id="main">
+<section class="pg"><h2>Your bag</h2><div id="cart"></div></section></main><div id="ftr"></div><script type="module">
+import {chrome} from "/assets/app.js"; chrome();
+
+import {getCart,setCart,money,esc,$} from "/assets/app.js";
+const draw = () => {
+  const c = getCart();
+  if (!c.length) { $("#cart").innerHTML = '<p class="note">Your bag is empty.</p><a class="btn" href="/shop/">Shop the collection</a>'; return; }
+  const sub = c.reduce((a, i) => a + i.price * i.qty, 0);
+  $("#cart").innerHTML = `<div class="two" style="padding-top:10px"><div class="rows">${c.map((i, n) => `<div class="row"><img src="${esc(i.img)}" alt=""><div><a href="/product/?s=${encodeURIComponent(i.slug)}"><b>${esc(i.name)}</b></a><div class="note">${esc(i.title)}</div>
+    <div class="qty"><button data-a="-" data-n="${n}" aria-label="Less">-</button>${i.qty}<button data-a="+" data-n="${n}" aria-label="More">+</button></div> <button class="link" data-a="x" data-n="${n}">Remove</button></div><div>${money(i.price * i.qty, i.cur)}</div></div>`).join("")}</div>
+    <div class="sum"><div class="l t"><span>Subtotal</span><span>${money(sub, c[0].cur)}</span></div><p class="note">Shipping and discounts are calculated at checkout.</p><a class="btn" style="width:100%;text-align:center" href="/checkout/">Checkout</a></div></div>`;
+};
+$("#cart").onclick = e => {
+  const b = e.target.closest("[data-a]"); if (!b) return; const c = getCart(), i = c[+b.dataset.n];
+  if (b.dataset.a === "+") i.qty = Math.min(10, i.qty + 1); else if (b.dataset.a === "-") i.qty--; else i.qty = 0;
+  setCart(c.filter(x => x.qty > 0)); draw();
+};
+draw();
+
+</script></body></html>

@@ -1,0 +1,40 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Product | Noctra</title><meta name="description" content="Noctra product."><meta name="theme-color" content="#0f0819">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css"></head><body><div id="hdr"></div><main id="main">
+<section class="pdp" id="pdp"><p>Loading...</p></section></main><div id="ftr"></div><script type="module">
+import {chrome} from "/assets/app.js"; chrome();
+
+import {rest,addToCart,money,esc,$} from "/assets/app.js";
+const slug = new URLSearchParams(location.search).get("s");
+const root = $("#pdp");
+let p = null;
+try { [p] = await rest(`products?slug=eq.${encodeURIComponent(slug || "")}&select=*,product_images(url,alt,sort),product_variants(id,title,options,price_minor,currency,active)`); } catch {}
+if (!p) { root.innerHTML = '<div><h2>Product not found</h2><a class="btn" href="/shop/">Back to shop</a></div>'; }
+else {
+  document.title = p.name + " | Noctra";
+  const imgs = p.product_images.sort((a, b) => a.sort - b.sort);
+  const vs = p.product_variants.filter(v => v.active);
+  vs.forEach(v => { if (!v.options || !Object.keys(v.options).length) v.options = { Option: v.title }; });
+  const names = [...new Set(vs.flatMap(v => Object.keys(v.options)))];
+  const sel = {}; names.forEach(n => sel[n] = vs[0]?.options[n]);
+  const cur = () => vs.find(v => names.every(n => v.options[n] === sel[n]));
+  root.innerHTML = `<div><div class="main"><img id="big" alt="${esc(p.name)}" src="${esc(imgs[0]?.url || "")}"></div>
+    <div class="thumbs">${imgs.map((i, n) => `<button class="${n ? "" : "on"}" data-u="${esc(i.url)}" aria-label="View ${n + 1}"><img src="${esc(i.url)}" alt="" loading="lazy"></button>`).join("")}</div></div>
+    <div><h1 style="font-size:clamp(2.2rem,4vw,3.2rem)">${esc(p.name)}</h1><p class="price" id="price"></p>
+    ${names.map(n => `<div class="og"><b>${esc(n)}</b><div class="opts" data-n="${esc(n)}">${[...new Set(vs.map(v => v.options[n]))].map(o => `<button class="opt${sel[n] === o ? " on" : ""}" data-v="${esc(o)}">${esc(o)}</button>`).join("")}</div></div>`).join("")}
+    <button class="btn" id="add" style="width:100%">Add to bag</button><p class="note" id="msg"></p>
+    ${p.production_days_min ? `<p class="note">Printed to order in ${p.production_days_min}-${p.production_days_max} business days, then shipped to you.</p>` : ""}
+    <p class="desc">${esc(p.description)}</p>${p.fit_notes ? `<p class="note"><b>Fit.</b> ${esc(p.fit_notes)}</p>` : ""}</div>`;
+  const upd = () => { const v = cur(); $("#price").textContent = v ? money(v.price_minor, v.currency) : "Not available in this combination"; $("#add").disabled = !v; };
+  upd();
+  root.onclick = e => {
+    const t = e.target.closest(".thumbs button"); if (t) { $("#big").src = t.dataset.u; root.querySelectorAll(".thumbs button").forEach(b => b.classList.toggle("on", b === t)); }
+    const o = e.target.closest(".opt"); if (o) { sel[o.parentNode.dataset.n] = o.dataset.v; o.parentNode.querySelectorAll(".opt").forEach(b => b.classList.toggle("on", b === o)); upd(); }
+    if (e.target.id === "add") { const v = cur(); if (!v) return; addToCart({ id: v.id, qty: 1, name: p.name, title: v.title, price: v.price_minor, cur: v.currency, img: imgs[0]?.url || "", slug: p.slug }); $("#msg").innerHTML = 'Added. <a class="link" href="/cart/">View bag</a>'; }
+  };
+}
+
+</script></body></html>

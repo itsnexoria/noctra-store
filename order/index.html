@@ -1,0 +1,28 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Your order | Noctra</title><meta name="description" content="Order status."><meta name="theme-color" content="#0f0819">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css"><meta name="robots" content="noindex"></head><body><div id="hdr"></div><main id="main">
+<section class="pg"><div id="o" class="prose"><p>Checking your order...</p></div></section></main><div id="ftr"></div><script type="module">
+import {chrome} from "/assets/app.js"; chrome();
+
+import {api,money,esc,setCart,$} from "/assets/app.js";
+const ref = new URLSearchParams(location.search).get("ref");
+const token = (JSON.parse(localStorage.noctra_orders || "{}"))[ref];
+const LABEL = { paid: "Payment received", fulfilling: "Being printed", shipped: "On its way", delivered: "Delivered", pending_payment: "Waiting for payment", cancelled: "Cancelled", refunded: "Refunded", needs_attention: "Under review" };
+async function load(n = 0) {
+  if (!ref || !token) { $("#o").innerHTML = "<h2>Order not found</h2><p>Open this page on the device you ordered from, or contact us with your order number.</p>"; return; }
+  let d; try { d = await api("status", { publicRef: ref, token }); } catch { $("#o").innerHTML = "<h2>Order not found</h2>"; return; }
+  const paid = d.paymentStatus === "paid";
+  if (paid) setCart([]);
+  $("#o").innerHTML = `<h2>${paid ? "Thank you." : "Order " + esc(d.publicRef)}</h2><p>Order <b>${esc(d.publicRef)}</b> &middot; <span class="ok">${paid ? LABEL[d.status] || d.status : d.paymentStatus === "failed" ? "Payment failed" : "Confirming your payment..."}</span></p>
+  ${paid ? "<p>A confirmation will be sent to your email.</p>" : ""}
+  <table>${d.items.map(i => `<tr><td>${esc(i.product_name)}<br><span class="note">${esc(i.variant_title)} x ${i.quantity}</span></td><td>${money(i.line_total_minor, d.currency)}</td></tr>`).join("")}
+  <tr><td>Shipping</td><td>${money(d.shippingMinor, d.currency)}</td></tr><tr><th>Total</th><th>${money(d.totalMinor, d.currency)}</th></tr></table>
+  ${d.tracking.length ? `<h3 style="margin-top:28px">Tracking</h3>${d.tracking.map(t => `<p>${esc(t.carrier || "Carrier")} ${t.tracking_url ? `<a class="link" href="${esc(t.tracking_url)}" rel="noopener">${esc(t.tracking_number || "Track parcel")}</a>` : esc(t.tracking_number || "")}</p>`).join("")}` : ""}`;
+  if (!paid && d.paymentStatus !== "failed" && n < 30) setTimeout(() => load(n + 1), 4000);
+}
+load();
+
+</script></body></html>

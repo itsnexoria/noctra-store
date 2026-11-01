@@ -1,15 +1,30 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Noctra — an editorial night label</title>
-    <meta name="description" content="Noctra is an independent design label. Collection 01 is in development." />
-    <meta name="theme-color" content="#121212" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Noctra | Premium prints, made to order</title><meta name="description" content="Premium made-to-order apparel and prints by Noctra, shipped worldwide."><meta name="theme-color" content="#0b0614">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css"></head><body><div id="hdr"></div><main id="main"><svg width="0" height="0" style="position:absolute"><defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6e3a1"/><stop offset="1" stop-color="#b8912f"/></linearGradient></defs></svg>
+<section class="hero"><div><h1>Dressed for <em>after dark.</em></h1>
+<p class="lead">Premium prints, made to order and delivered to your door.</p>
+<div class="acts"><a class="btn" href="/shop/">Shop the collection</a><a class="btn ghost" href="/about/">Our story</a></div></div>
+<div class="art"><i></i><i></i><span id="art" style="display:contents"></span></div></section>
+<div class="marq" id="mq" aria-hidden="true"></div>
+<section class="sec"><div class="hd"><h2>New arrivals</h2><a class="link" href="/shop/">View all</a></div><div class="grid" id="grid"></div></section>
+<section><div class="facts"><div id="f1"><h3>Made to order</h3><p>Nothing sits on a shelf. Your piece is printed after you order it.</p></div>
+<div id="f2"><h3>Delivered worldwide</h3><p>Tracked shipping to the countries listed at checkout.</p></div>
+<div id="f3"><h3>Secure checkout</h3><p>Pay in rand with cards and local methods through Paystack.</p></div></div></section>
+<section><div class="cta"><h2>Be first to the next drop.</h2><p class="note">New pieces, early access and nothing else.</p><span id="cta"></span></div></section>
+</main><div id="ftr"></div><script type="module">
+import {chrome} from "/assets/app.js"; chrome();
+
+import {rest,card,LIST,emptyShelf,waitlistForm,star,$} from "/assets/app.js";
+$("#art").innerHTML = star;
+["f1","f2","f3"].forEach(i => $("#"+i).insertAdjacentHTML("afterbegin", star));
+const words = ["Made to order","Shipped worldwide","Premium prints","Dressed for after dark"];
+const run = words.map(w => `<span>${star}${w}</span>`).join("").repeat(4);
+$("#mq").innerHTML = `<div>${run}${run}</div>`;
+$("#cta").innerHTML = waitlistForm("cta");
+try { const p = await rest(LIST + "&limit=8"); $("#grid").innerHTML = p.length ? p.map(card).join("") : emptyShelf(); }
+catch { $("#grid").innerHTML = emptyShelf(); }
+
+</script></body></html>

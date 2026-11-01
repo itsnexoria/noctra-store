@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /admin/
-# Sitemap is generated at Stage 4 once real routes and products exist.
