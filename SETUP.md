@@ -20,7 +20,7 @@ Shipping prices live in Supabase table `site_settings` (key `shipping`, amounts 
 
 1. **Supabase Auth (customer accounts):** Authentication > URL Configuration. Set Site URL to `https://nexorealm.org` and add `https://nexorealm.org/account/` to Redirect URLs. Under Authentication > SMTP, use your Resend SMTP settings (the built-in mailer only sends a few emails per hour).
 2. **Edge function secrets:** `ALLOWED_ORIGINS` must include `https://nexorealm.org` (used by `store-api`, `account-api`, `printify`). `CRON_SECRET`, `RESEND_API_KEY`, `MAIL_FROM`, `ORDER_TOKEN_SECRET`, `SITE_URL`, `ALERT_EMAIL` are shared with the existing functions.
-3. **Cloudflare Pages Functions:** the `functions/` folder deploys automatically with the site (sitemap, product and journal meta tags). No build command is needed.
+3. **Cloudflare Worker:** `wrangler.jsonc` and `src/worker.js` serve the site and add sitemap, product and journal meta tags. Keep the deploy command as `npx wrangler deploy`. The `name` in `wrangler.jsonc` must match your Worker name in the Cloudflare dashboard.
 4. **Journal:** five scripture drafts are in the admin Journal tab. Read them, edit if you like, then tick Published.
 5. **Hero photos:** admin > Hero photos to choose the home page slideshow.
 6. **Cron jobs** (already created in Supabase): `noctra-cart-recovery` (every 30 min), `noctra-fulfilment-health` (hourly).
