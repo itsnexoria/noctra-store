@@ -5,22 +5,42 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/site.css"></head><body><div id="hdr"></div><main id="main">
 <section class="pg"><h2>Your bag</h2><div id="cart"></div></section></main><div id="ftr"></div><script type="module">
-import {chrome} from "/assets/app.js"; chrome();
-
-import {getCart,setCart,money,esc,$} from "/assets/app.js";
-const draw = () => {
+import {chrome, getCart, setCart, px, chargeNote, refreshPx, api, acct, esc, COUNTRIES, countryName, guessCountry, shippingCountries, $} from "/assets/app.js"; chrome();
+const MSG = { country_not_supported: "We don't ship to that country yet.", invalid_code: "That discount code isn't valid.", item_unavailable: "An item in your bag is no longer available. Please remove it.", rate_limited: "Too many requests. Please wait a moment." };
+let cc = guessCountry(), code = localStorage.noctra_code || "", countries = [], q = null, qerr = "";
+const qp = new URLSearchParams(location.search);
+if (qp.get("r") && qp.get("t")) {
+  try { const d = await acct("restore", { ref: qp.get("r"), token: qp.get("t") }); if (d.items?.length && !getCart().length) setCart(d.items); } catch {}
+  history.replaceState(null, "", location.pathname);
+}
+try { countries = await shippingCountries(); if (!countries.includes(cc)) cc = ""; } catch {}
+async function quote() {
+  const c = getCart(); q = null; qerr = "";
+  if (!c.length || !cc) return paint();
+  try { q = await api("quote", { items: c.map(i => ({ variantId: i.id, qty: i.qty })), country: cc, discountCode: code }); }
+  catch (e) { qerr = MSG[e.code] || "We couldn't work out shipping just now."; }
+  paint();
+}
+function paint() {
   const c = getCart();
   if (!c.length) { $("#cart").innerHTML = '<p class="note">Your bag is empty.</p><a class="btn" href="/shop/">Shop the collection</a>'; return; }
-  const sub = c.reduce((a, i) => a + i.price * i.qty, 0);
+  const sub = c.reduce((a, i) => a + i.price * i.qty, 0), cur = c[0].cur;
   $("#cart").innerHTML = `<div class="two" style="padding-top:10px"><div class="rows">${c.map((i, n) => `<div class="row"><img src="${esc(i.img)}" alt=""><div><a href="/product/?s=${encodeURIComponent(i.slug)}"><b>${esc(i.name)}</b></a><div class="note">${esc(i.title)}</div>
-    <div class="qty"><button data-a="-" data-n="${n}" aria-label="Less">-</button>${i.qty}<button data-a="+" data-n="${n}" aria-label="More">+</button></div> <button class="link" data-a="x" data-n="${n}">Remove</button></div><div>${money(i.price * i.qty, i.cur)}</div></div>`).join("")}</div>
-    <div class="sum"><div class="l t"><span>Subtotal</span><span>${money(sub, c[0].cur)}</span></div><p class="note">Shipping and discounts are calculated at checkout.</p><a class="btn" style="width:100%;text-align:center" href="/checkout/">Checkout</a></div></div>`;
-};
+    <div class="qty"><button data-a="-" data-n="${n}" aria-label="Less">-</button>${i.qty}<button data-a="+" data-n="${n}" aria-label="More">+</button></div> <button class="link" data-a="x" data-n="${n}">Remove</button></div><div>${px(i.price * i.qty, i.cur)}</div></div>`).join("")}</div>
+    <div class="sum"><div class="l"><span>Subtotal</span><span>${px(sub, cur)}</span></div>
+    <div class="shipbox"><label class="note">Ship to<select id="cc"><option value="">Select country</option>${countries.map(k => `<option value="${k}"${k === cc ? " selected" : ""}>${esc(countryName(k))}</option>`).join("")}</select></label>
+    <label class="note">Discount code<span style="display:flex;gap:8px"><input id="code" value="${esc(code)}" style="text-transform:uppercase;margin:4px 0 10px"><button class="btn ghost sm" id="ap" style="height:44px;margin-top:4px">Apply</button></span></label></div>
+    ${q ? `<div class="l"><span>Shipping to ${esc(countryName(cc))}</span><span>${px(q.shippingMinor, q.currency)}</span></div>${q.discountMinor ? `<div class="l"><span>Discount</span><span>-${px(q.discountMinor, q.currency)}</span></div>` : ""}<div class="l t"><span>Estimated total</span><span>${px(q.totalMinor, q.currency)}</span></div><p class="note">You will be charged ${new Intl.NumberFormat("en-ZA", { style: "currency", currency: q.currency }).format(q.totalMinor / 100)}.</p>`
+      : `<div class="l t"><span>Total</span><span>${px(sub, cur)}</span></div><p class="note">${qerr || "Choose a country to see shipping and your total."}</p>`}
+    ${chargeNote}<a class="btn" style="width:100%;text-align:center;display:block" href="/checkout/">Checkout</a></div></div>`;
+  refreshPx();
+}
 $("#cart").onclick = e => {
+  if (e.target.id === "ap") { code = $("#code").value.trim().toUpperCase(); localStorage.noctra_code = code; return quote(); }
   const b = e.target.closest("[data-a]"); if (!b) return; const c = getCart(), i = c[+b.dataset.n];
   if (b.dataset.a === "+") i.qty = Math.min(10, i.qty + 1); else if (b.dataset.a === "-") i.qty--; else i.qty = 0;
-  setCart(c.filter(x => x.qty > 0)); draw();
+  setCart(c.filter(x => x.qty > 0)); quote();
 };
-draw();
-
+$("#cart").onchange = e => { if (e.target.id === "cc") { cc = e.target.value; localStorage.noctra_cc = cc; quote(); } };
+paint(); quote();
 </script></body></html>

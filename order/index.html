@@ -5,24 +5,18 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/site.css"><meta name="robots" content="noindex"></head><body><div id="hdr"></div><main id="main">
 <section class="pg"><div id="o" class="prose"><p>Checking your order...</p></div></section></main><div id="ftr"></div><script type="module">
-import {chrome} from "/assets/app.js"; chrome();
-
-import {api,money,esc,setCart,$} from "/assets/app.js";
-const ref = new URLSearchParams(location.search).get("ref");
-const token = (JSON.parse(localStorage.noctra_orders || "{}"))[ref];
-const LABEL = { paid: "Payment received", fulfilling: "Being printed", shipped: "On its way", delivered: "Delivered", pending_payment: "Waiting for payment", cancelled: "Cancelled", refunded: "Refunded", needs_attention: "Under review" };
+import {chrome, api, money, esc, setCart, orderView, $} from "/assets/app.js"; chrome();
+const ref = new URLSearchParams(location.search).get("ref"), qt = new URLSearchParams(location.search).get("t");
+const token = qt || (JSON.parse(localStorage.noctra_orders || "{}"))[ref];
 async function load(n = 0) {
-  if (!ref || !token) { $("#o").innerHTML = "<h2>Order not found</h2><p>Open this page on the device you ordered from, or contact us with your order number.</p>"; return; }
-  let d; try { d = await api("status", { publicRef: ref, token }); } catch { $("#o").innerHTML = "<h2>Order not found</h2>"; return; }
+  if (!ref || !token) { location.replace("/track/" + (ref ? "?ref=" + encodeURIComponent(ref) : "")); return; }
+  let d; try { d = await api("status", { publicRef: ref, token }); } catch { location.replace("/track/?ref=" + encodeURIComponent(ref)); return; }
   const paid = d.paymentStatus === "paid";
   if (paid) setCart([]);
-  $("#o").innerHTML = `<h2>${paid ? "Thank you." : "Order " + esc(d.publicRef)}</h2><p>Order <b>${esc(d.publicRef)}</b> &middot; <span class="ok">${paid ? LABEL[d.status] || d.status : d.paymentStatus === "failed" ? "Payment failed" : "Confirming your payment..."}</span></p>
-  ${paid ? "<p>A confirmation will be sent to your email.</p>" : ""}
-  <table>${d.items.map(i => `<tr><td>${esc(i.product_name)}<br><span class="note">${esc(i.variant_title)} x ${i.quantity}</span></td><td>${money(i.line_total_minor, d.currency)}</td></tr>`).join("")}
-  <tr><td>Shipping</td><td>${money(d.shippingMinor, d.currency)}</td></tr><tr><th>Total</th><th>${money(d.totalMinor, d.currency)}</th></tr></table>
-  ${d.tracking.length ? `<h3 style="margin-top:28px">Tracking</h3>${d.tracking.map(t => `<p>${esc(t.carrier || "Carrier")} ${t.tracking_url ? `<a class="link" href="${esc(t.tracking_url)}" rel="noopener">${esc(t.tracking_number || "Track parcel")}</a>` : esc(t.tracking_number || "")}</p>`).join("")}` : ""}`;
+  const status = paid ? "" : d.paymentStatus === "failed" ? '<p class="err">Payment failed. You can try again from your bag.</p>' : '<p class="ok">Confirming your payment...</p>';
+  $("#o").innerHTML = `${paid ? "<h1 style=\"font-size:2.6rem\">Thank you.</h1><p>A confirmation is on its way to your email.</p>" : ""}${status}${orderView({ ...d, discountMinor: 0 })}
+  <p style="margin-top:28px"><a class="btn ghost" href="/account/">Sign in to see all your orders</a></p>`;
   if (!paid && d.paymentStatus !== "failed" && n < 30) setTimeout(() => load(n + 1), 4000);
 }
 load();
-
 </script></body></html>

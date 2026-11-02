@@ -8,13 +8,14 @@ import {chrome} from "/assets/app.js"; chrome();
 import {SB,KEY} from "/assets/config.js";
 import {fn,money,esc,$} from "/assets/app.js";
 let tok = sessionStorage.noctra_at || "", tab = sessionStorage.noctra_tab || "overview";
-const db = async (m, q, b) => {
-  const r = await fetch(`${SB}/rest/v1/${q}`, { method: m, headers: { apikey: KEY, Authorization: "Bearer " + tok, "content-type": "application/json", Prefer: "return=representation" }, body: b ? JSON.stringify(b) : undefined });
+const db = async (m, q, b, prefer = "return=representation") => {
+  const r = await fetch(`${SB}/rest/v1/${q}`, { method: m, headers: { apikey: KEY, Authorization: "Bearer " + tok, "content-type": "application/json", Prefer: prefer }, body: b ? JSON.stringify(b) : undefined });
   if (r.status === 401) throw Object.assign(new Error("auth"), { auth: 1 });
   if (!r.ok) throw new Error((await r.text()).slice(0, 160));
   return r.status === 204 ? null : r.json();
 };
 const get = q => db("GET", q);
+const rpcA = async (n, b) => { const r = await fetch(`${SB}/rest/v1/rpc/${n}`, { method: "POST", headers: { apikey: KEY, Authorization: "Bearer " + tok, "content-type": "application/json" }, body: JSON.stringify(b || {}) }); if (r.status === 401) throw Object.assign(new Error("auth"), { auth: 1 }); if (!r.ok) throw new Error((await r.text()).slice(0, 160)); return r.json(); };
 const toast = t => { const e = document.createElement("div"); e.className = "toast"; e.textContent = t; document.body.append(e); setTimeout(() => e.remove(), 2600); };
 const csv = (n, rows) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([rows.map(r => r.map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n")], { type: "text/csv" })); a.download = n; a.click(); };
 const R = v => (v / 100).toFixed(2);
@@ -31,13 +32,78 @@ function login(msg = "") {
     try { const a = await get("admin_roles?select=role"); if (!a.length) throw 0; shell(); } catch { sessionStorage.removeItem("noctra_at"); tok = ""; login("This account isn't an admin."); }
   };
 }
-const TABS = { overview: "Overview", orders: "Orders", products: "Products", blog: "Journal", discounts: "Discounts", waitlist: "Subscribers", settings: "Shipping" };
+const TABS = { overview: "Overview", sales: "Sales", orders: "Orders", products: "Products", collections: "Collections", hero: "Hero photos", blog: "Journal", discounts: "Discounts", waitlist: "Subscribers", settings: "Shipping" };
 function shell() {
   root.innerHTML = `<div class="adm"><aside>${Object.entries(TABS).map(([k, v]) => `<button data-t="${k}" class="${k === tab ? "on" : ""}">${v}</button>`).join("")}<button id="out" style="margin-top:10px">Sign out</button></aside><div id="pn"></div></div>`;
   root.querySelector("aside").onclick = e => { const b = e.target.closest("button"); if (!b) return; if (b.id === "out") { sessionStorage.removeItem("noctra_at"); tok = ""; return login(); } tab = b.dataset.t; sessionStorage.noctra_tab = tab; shell(); };
   VIEWS[tab]().catch(e => e.auth ? (sessionStorage.removeItem("noctra_at"), login("Session expired. Sign in again.")) : $("#pn").innerHTML = `<p class="err">${esc(e.message)}</p>`);
 }
+const sgText = g => g?.rows?.length ? [["Size", ...g.columns].join(","), ...g.rows.map(r => [r.size, ...r.v].join(","))].join("\n") : "";
+function sgParse(t) {
+  const L = t.trim().split(/\n/).map(l => l.split(",").map(x => x.trim())).filter(l => l.length > 1 && l[0]);
+  if (L.length < 2) return {};
+  const cols = L[0].slice(1), rows = L.slice(1).map(l => ({ size: l[0], v: cols.map((_, i) => { const n = parseFloat(l[i + 1]); if (isNaN(n)) throw new Error("bad"); return n; }) }));
+  return { unit: "in", columns: cols, rows, note: "Garment measurements, laid flat. Between sizes? Size up for a relaxed fit." };
+}
+async function attention() {
+  const [o, j, em, wh] = await Promise.all([
+    get("orders?select=public_ref,email,payment_status&status=eq.needs_attention&limit=20"),
+    get("fulfillment_jobs?select=status,attempts,last_error,orders(public_ref)&or=(status.in.(failed,needs_reconcile),and(status.eq.queued,last_error.not.is.null))&limit=20"),
+    get("email_outbox?select=kind,last_error,created_at&status=eq.failed&order=created_at.desc&limit=5"),
+    get("webhook_events?select=event_type,error&status=eq.failed&order=received_at.desc&limit=5"),
+  ]);
+  const rows = [...o.map(x => `<li>Order <b>${esc(x.public_ref)}</b> needs attention (payment ${esc(x.payment_status)})</li>`),
+    ...j.map(x => `<li>Print order <b>${esc(x.orders?.public_ref || "")}</b> is ${esc(x.status.replace(/_/g, " "))} after ${x.attempts} tries${x.last_error ? `: ${esc(x.last_error)}` : ""}</li>`),
+    ...em.map(x => `<li>An email (${esc(x.kind.replace(/_/g, " "))}) failed to send: ${esc(x.last_error || "")}</li>`),
+    ...wh.map(x => `<li>Payment webhook failed: ${esc(x.event_type)} ${esc(x.error || "")}</li>`)];
+  return `<div class="panel" style="${rows.length ? "border-color:#7a2f3b" : ""}"><h3>${rows.length ? "Needs your attention" : "All clear"}</h3>${rows.length ? `<ul style="margin:0;padding-left:20px;color:var(--muted)">${rows.join("")}</ul><p class="note">You also get an email alert for each of these.</p>` : '<p class="note">No failed payments, print orders or emails right now.</p>'}</div>`;
+}
 const VIEWS = {
+  async sales() {
+    let days = +sessionStorage.noctra_days || 30;
+    const fx = 18.5;
+    const draw = async () => {
+      const d = await rpcA("admin_sales_summary", { p_days: days, p_fx: fx });
+      const net = d.revenue - d.shipping, margin = net - d.cost, rate = d.started ? Math.round(d.orders / d.started * 100) : 0;
+      const bucket = days > 90 ? 7 : 1, bars = new Map();
+      for (let i = days - 1; i >= 0; i--) { const t = new Date(Date.now() - i * 864e5), k = Math.floor((Date.now() - t) / 864e5 / bucket); bars.set(k, { v: 0, l: t.getDate() + "/" + (t.getMonth() + 1) }); }
+      d.daily.forEach(x => { const k = Math.floor((Date.now() - new Date(x.d + "T12:00:00Z")) / 864e5 / bucket); if (bars.has(k)) bars.get(k).v += x.revenue; });
+      const list = [...bars.entries()].sort((a, b) => b[0] - a[0]).map(x => x[1]), mx = Math.max(...list.map(x => x.v), 1);
+      $("#pn").innerHTML = `<div class="panel"><p style="display:flex;gap:8px;flex-wrap:wrap;margin:0">${[7, 30, 90, 365].map(n => `<button class="btn ${n === days ? "" : "ghost"} sm" data-days="${n}">${n === 365 ? "12 months" : n + " days"}</button>`).join("")}</p></div>
+      <div class="stats"><div class="stat"><b>${money(d.revenue)}</b><span>Revenue</span></div><div class="stat"><b>${d.orders}</b><span>Paid orders</span></div><div class="stat"><b>${d.orders ? money(Math.round(d.revenue / d.orders)) : "-"}</b><span>Average order</span></div><div class="stat"><b>${d.orders ? money(margin) : "-"}</b><span>Est. product margin</span></div></div>
+      <div class="stats"><div class="stat"><b>${d.started}</b><span>Orders started</span></div><div class="stat"><b>${rate}%</b><span>Became paid</span></div><div class="stat"><b>${d.abandoned}</b><span>Abandoned bags</span></div><div class="stat"><b>${d.repeat_customers}</b><span>Repeat customers (all time)</span></div></div>
+      <div class="panel"><h3>Revenue${bucket > 1 ? " per week" : " per day"}</h3><div class="bars">${list.map(x => `<div title="${x.l}: ${money(x.v)}" style="height:${Math.max(3, x.v / mx * 100)}%"></div>`).join("")}</div><div class="bl"><span>${list[0].l}</span><span>${list[list.length - 1].l}</span></div></div>
+      <div class="two2"><div class="panel"><h3>Best sellers</h3>${d.top.length ? `<table>${d.top.map(t => `<tr><td>${esc(t.name)}</td><td>${t.qty} sold</td><td>${money(t.revenue)}</td></tr>`).join("")}</table>` : '<p class="note">Sales will show here.</p>'}</div>
+      <div class="panel"><h3>Where orders go</h3>${d.countries.length ? `<table>${d.countries.map(t => `<tr><td>${esc(t.cc || "?")}</td><td>${t.orders} orders</td><td>${money(t.revenue)}</td></tr>`).join("")}</table>` : '<p class="note">No orders in this period.</p>'}</div></div>
+      <p class="note">Margin = revenue minus shipping charged minus Printify production cost at R${fx}/USD. It ignores Printify shipping, Paystack fees and refunds, so treat it as a guide. Refunded or disputed orders in this period: ${d.refunded}. Discounts given: ${money(d.discounts)}.</p>`;
+      $("#pn").onclick = e => { const b = e.target.closest("[data-days]"); if (b) { days = +b.dataset.days; sessionStorage.noctra_days = days; draw(); } };
+    };
+    await draw();
+  },
+  async collections() {
+    const c = await get("collections?select=*&order=sort");
+    const slug = t => t.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+    $("#pn").innerHTML = `<div class="panel"><h3>New collection</h3><form class="f" id="cf"><label>Title<input name="t" required maxlength="120"></label><label>Web address<input name="s" required></label><label class="full">Short description<input name="d" maxlength="200"></label><div class="full"><button class="btn sm">Create</button> <span id="cm" class="err"></span></div></form><p class="note">Assign products to a collection under Products &gt; Details. Collections only appear in the shop once they contain a visible product.</p></div>
+    <div class="panel"><h3>Collections</h3>${c.length ? `<table><tr><th>Title</th><th>Order</th><th>Shown</th></tr>${c.map(x => `<tr><td>${esc(x.title)}<br><span class="note">${esc(x.description)}</span></td><td><input class="inp n" type="number" value="${x.sort}" data-so="${x.id}" style="width:80px"></td><td><input type="checkbox" data-pu="${x.id}" ${x.published ? "checked" : ""}></td></tr>`).join("")}</table>` : '<p class="note">No collections yet.</p>'}</div>`;
+    const f = $("#cf"); f.t.oninput = () => f.s.value = slug(f.t.value);
+    f.onsubmit = async e => { e.preventDefault(); try { await db("POST", "collections", { title: f.t.value.trim(), slug: slug(f.s.value), description: f.d.value.trim(), published: true, sort: c.length + 1 }); toast("Collection created"); shell(); } catch { $("#cm").textContent = "Could not create. The web address may already exist."; } };
+    $("#pn").onchange = async e => { const t = e.target; try { if (t.dataset.pu) await db("PATCH", `collections?id=eq.${t.dataset.pu}`, { published: t.checked }); else if (t.dataset.so) await db("PATCH", `collections?id=eq.${t.dataset.so}`, { sort: +t.value }); else return; toast("Saved"); } catch { toast("Could not save"); } };
+  },
+  async hero() {
+    const [p, hs] = await Promise.all([get("products?select=slug,name,status,product_images(url,sort)&order=created_at.desc&limit=100"), get("site_settings?key=eq.hero&select=value")]);
+    let sel = (hs[0]?.value?.items || []).slice();
+    const all = p.filter(x => x.status === "published").flatMap(x => [...x.product_images].sort((a, b) => a.sort - b.sort).map(i => ({ url: i.url, slug: x.slug, name: x.name })));
+    const draw = () => { $("#pn").innerHTML = `<div class="panel"><h3>Home page photos</h3><p class="note">Tap photos to show them in the home page slideshow, in the order you tap. Mockups showing the piece worn look best. With none selected, the site picks photos automatically.</p>
+      <p><span class="ok">${sel.length} selected</span> <button class="btn sm" id="hs">Save</button> <button class="btn ghost sm" id="hc">Clear</button> <span id="hm" class="ok"></span></p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px">${all.map((i, n) => { const k = sel.findIndex(x => x.url === i.url); return `<button data-i="${n}" style="padding:0;border:2px solid ${k >= 0 ? "var(--gold)" : "var(--line)"};border-radius:10px;overflow:hidden;background:var(--plum);cursor:pointer;position:relative"><img src="${esc(i.url)}" alt="${esc(i.name)}" loading="lazy" style="width:100%;aspect-ratio:3/4;object-fit:cover;display:block">${k >= 0 ? `<b style="position:absolute;top:6px;left:6px;background:var(--gold);color:#1a1020;border-radius:99px;min-width:24px;height:24px;display:grid;place-items:center">${k + 1}</b>` : ""}</button>`; }).join("")}</div></div>`; };
+    draw();
+    $("#pn").onclick = async e => {
+      const b = e.target.closest("[data-i]");
+      if (b) { const i = all[+b.dataset.i], k = sel.findIndex(x => x.url === i.url); k >= 0 ? sel.splice(k, 1) : sel.length < 8 && sel.push(i); return draw(); }
+      if (e.target.id === "hc") { sel = []; return draw(); }
+      if (e.target.id === "hs") { try { await db("POST", "site_settings?on_conflict=key", { key: "hero", value: { items: sel }, is_public: true }, "resolution=merge-duplicates,return=minimal"); $("#hm").textContent = "Saved. Refresh the home page to see it."; } catch { $("#hm").textContent = "Could not save."; } }
+    };
+  },
   async overview() {
     const o = await get("orders?select=public_ref,email,status,payment_status,total_minor,currency,created_at&order=created_at.desc&limit=500");
     const failed = await get("fulfillment_jobs?select=id&status=eq.failed");
@@ -48,7 +114,8 @@ const VIEWS = {
     const days = [...Array(14)].map((_, i) => { const d = new Date(Date.now() - (13 - i) * 864e5); return { k: d.toISOString().slice(0, 10), l: d.getDate(), v: 0 }; });
     paid.forEach(x => { const d = days.find(d => d.k === x.created_at.slice(0, 10)); if (d) d.v += x.total_minor; });
     const mx = Math.max(...days.map(d => d.v), 1);
-    $("#pn").innerHTML = `<div class="stats"><div class="stat"><b>${money(rev)}</b><span>Revenue</span></div><div class="stat"><b>${paid.length}</b><span>Paid orders</span></div>
+    const att = await attention().catch(() => "");
+    $("#pn").innerHTML = `${att}<div class="stats"><div class="stat"><b>${money(rev)}</b><span>Revenue</span></div><div class="stat"><b>${paid.length}</b><span>Paid orders</span></div>
     <div class="stat"><b>${paid.length ? money(Math.round(rev / paid.length)) : "-"}</b><span>Average order</span></div><div class="stat"><b>${o.filter(x => x.status === "needs_attention").length + failed.length}</b><span>Need attention</span></div></div>
     <div class="panel"><h3>Last 14 days</h3><div class="bars">${days.map(d => `<div title="${money(d.v)}" style="height:${Math.max(3, d.v / mx * 100)}%"></div>`).join("")}</div><div class="bl">${days.map(d => `<span>${d.l}</span>`).join("")}</div></div>
     <div class="two2"><div class="panel"><h3>Best sellers</h3>${top.length ? top.map(t => `<div class="l" style="display:flex;justify-content:space-between;padding:6px 0"><span>${esc(t[0])}</span><b>${t[1]} sold</b></div>`).join("") : '<p class="note">Sales will show here.</p>'}</div>
@@ -81,18 +148,21 @@ const VIEWS = {
     };
   },
   async products() {
-    const p = await get("products?select=id,name,description,fit_notes,status,product_images(url,sort),product_variants(id,title,price_minor,active)&order=created_at.desc&limit=200");
+    const p = await get("products?select=id,name,description,fit_notes,status,collection_id,size_guide,product_images(url,sort),product_variants(id,title,price_minor,active)&order=created_at.desc&limit=200"); const cl = await get("collections?select=id,title&order=sort");
     $("#pn").innerHTML = `<div class="panel"><h3>Products</h3><p style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><input class="inp" id="mk" type="number" placeholder="Raise all prices by %" style="width:200px"><button class="btn ghost sm" id="mkb">Apply to all</button></p>${p.length ? p.map(x => { const im = [...x.product_images].sort((a, b) => a.sort - b.sort)[0]; return `<div class="prod"><img src="${esc(im?.url || "")}" alt=""><div><b>${esc(x.name)}</b><div class="note">${x.product_variants.length} variants <button class="link" data-v="${x.id}">Prices</button> <button class="link" data-d="${x.id}">Details</button></div></div>
       <select class="inp" data-s="${x.id}">${["published", "draft", "archived"].map(s => `<option ${s === x.status ? "selected" : ""}>${s}</option>`).join("")}</select>
-      <div class="vrows" id="d${x.id}" hidden><input class="inp" data-f="name" data-id="${x.id}" value="${esc(x.name)}"><textarea rows="4" data-f="description" data-id="${x.id}">${esc(x.description)}</textarea><input class="inp" data-f="fit_notes" data-id="${x.id}" placeholder="Fit notes (optional)" value="${esc(x.fit_notes)}"></div>
+      <div class="vrows" id="d${x.id}" hidden><input class="inp" data-f="name" data-id="${x.id}" value="${esc(x.name)}"><textarea rows="4" data-f="description" data-id="${x.id}">${esc(x.description)}</textarea><input class="inp" data-f="fit_notes" data-id="${x.id}" placeholder="Fit notes (optional)" value="${esc(x.fit_notes)}"><label class="note">Collection <select class="inp" data-col="${x.id}"><option value="">None</option>${cl.map(c => `<option value="${c.id}" ${c.id === x.collection_id ? "selected" : ""}>${esc(c.title)}</option>`).join("")}</select></label>
+      <label class="note">Size guide (first row = column names, e.g. Size,Width,Length)<textarea rows="6" data-sgt="${x.id}" placeholder="Size,Width,Length&#10;S,18,28&#10;M,20,29">${esc(sgText(x.size_guide))}</textarea></label><div><button class="btn ghost sm" data-sgs="${x.id}">Save size guide</button> <span class="note">Measurements in inches.</span></div></div>
       <div class="vrows" id="v${x.id}" hidden>${x.product_variants.map(v => `<div><span>${esc(v.title)}</span>R <input class="inp n" type="number" step="1" min="0" value="${R(v.price_minor)}" data-p="${v.id}"><label class="note"><input type="checkbox" data-a="${v.id}" ${v.active ? "checked" : ""}> on sale</label></div>`).join("")}</div></div>`; }).join("") : '<p class="note">No products yet. Sync from Printify on the Overview tab.</p>'}</div>`;
     const pn = $("#pn");
-    pn.onclick = async e => { const b = e.target.closest("[data-v],[data-d]"); if (b) { const r = $((b.dataset.v ? "#v" : "#d") + (b.dataset.v || b.dataset.d)); r.hidden = !r.hidden; }
+    pn.onclick = async e => { const sb = e.target.closest("[data-sgs]"); if (sb) { try { await db("PATCH", `products?id=eq.${sb.dataset.sgs}`, { size_guide: sgParse($(`[data-sgt="${sb.dataset.sgs}"]`).value) }); toast("Size guide saved"); } catch { toast("Check the size guide format"); } return; }
+      const b = e.target.closest("[data-v],[data-d]"); if (b) { const r = $((b.dataset.v ? "#v" : "#d") + (b.dataset.v || b.dataset.d)); r.hidden = !r.hidden; }
       if (e.target.id === "mkb") { const pc = +$("#mk").value; if (!pc || !confirm(`Change every price by ${pc}%?`)) return;
         try { for (const x of p) for (const v of x.product_variants) await db("PATCH", `product_variants?id=eq.${v.id}`, { price_minor: Math.max(500, Math.round(v.price_minor * (1 + pc / 100) / 500) * 500) }); toast("Prices updated"); shell(); } catch { toast("Could not update"); } } };
     pn.onchange = async e => { const t = e.target;
       try {
         if (t.dataset.s) await db("PATCH", `products?id=eq.${t.dataset.s}`, { status: t.value });
+        else if (t.dataset.col) await db("PATCH", `products?id=eq.${t.dataset.col}`, { collection_id: t.value || null });
         else if (t.dataset.f) await db("PATCH", `products?id=eq.${t.dataset.id}`, { [t.dataset.f]: t.value });
         else if (t.dataset.p) await db("PATCH", `product_variants?id=eq.${t.dataset.p}`, { price_minor: Math.round(+t.value * 100) });
         else if (t.dataset.a) await db("PATCH", `product_variants?id=eq.${t.dataset.a}`, { active: t.checked });

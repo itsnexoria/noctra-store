@@ -1,0 +1,38 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Your account | Noctra</title><meta name="description" content="Sign in to see your Noctra orders."><meta name="theme-color" content="#0f0819">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css"><meta name="robots" content="noindex"><meta name="robots" content="noindex"></head><body><div id="hdr"></div><main id="main">
+<section class="pg"><div id="a" class="prose" style="max-width:760px"><div class="sk-line" style="width:40%;height:2em"></div><div class="sk-line"></div></div></section></main><div id="ftr"></div><script type="module">
+import {chrome, session, signInLink, signOut, takeAuthHash, rpc, rest, esc, money, timeline, trackingHtml, $} from "/assets/app.js"; import {SB, KEY} from "/assets/config.js"; chrome();
+const A = $("#a");
+const hv = takeAuthHash();
+function loginForm(msg = "", ok = false) {
+  A.innerHTML = `<h1 style="font-size:clamp(2.2rem,5vw,3.4rem)">Your account</h1><p class="note">See your orders and tracking in one place. We'll email you a secure sign-in link, so there's no password to remember.</p>
+  <form class="inline-f" id="lf" style="margin:22px 0"><input name="e" type="email" placeholder="Email address" required autocomplete="email"><button class="btn">Email me a link</button></form>
+  <p class="${ok ? "ok" : "err"}" id="lm" role="status">${esc(msg)}</p><p class="note">Just checking on a recent order? <a class="link" href="/track/">Track it without signing in</a>.</p>`;
+  $("#lf").onsubmit = async e => { e.preventDefault(); const b = e.target.querySelector("button"); b.disabled = true;
+    try { await signInLink(e.target.e.value.trim()); loginForm("Check your inbox for the sign-in link. It can take a minute to arrive.", true); }
+    catch { b.disabled = false; $("#lm").textContent = "We couldn't send the link just now. Please try again in a moment."; } };
+}
+async function home(s) {
+  let user = {}; try { user = await (await fetch(SB + "/auth/v1/user", { headers: { apikey: KEY, Authorization: "Bearer " + s.access_token } })).json(); } catch {}
+  if (!user.email) { signOut(); return loginForm("Your session expired. Please sign in again."); }
+  try { await rpc("claim_orders", {}, s.access_token); } catch {}
+  let orders = [], prof = {};
+  try {
+    orders = await rest("orders?select=public_ref,status,payment_status,currency,total_minor,shipping_minor,created_at,order_items(product_name,variant_title,quantity,line_total_minor),tracking_events(carrier,tracking_number,tracking_url,occurred_at)&payment_status=eq.paid&order=created_at.desc&limit=50", s.access_token);
+    [prof = {}] = await rest("customer_profiles?select=full_name", s.access_token);
+  } catch {}
+  A.innerHTML = `<div class="ord"><h1 style="font-size:clamp(2rem,4.5vw,3rem);margin:0">Your orders</h1><button class="btn ghost sm" id="so">Sign out</button></div><p class="note">${esc(user.email)}</p>
+  ${orders.length ? orders.map(o => `<div class="card-box"><div class="ord"><b>${esc(o.public_ref)}</b><span class="note">${new Date(o.created_at).toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" })} &middot; ${money(o.total_minor, o.currency)}</span></div>
+    ${timeline({ status: o.status, paymentStatus: o.payment_status, tracking: o.tracking_events })}
+    ${o.order_items.map(i => `<p style="margin:4px 0">${esc(i.product_name)} <span class="note">(${esc(i.variant_title)}) x ${i.quantity}</span></p>`).join("")}${trackingHtml(o.tracking_events)}</div>`).join("") : '<div class="card-box"><p>No orders yet. When you buy with this email address, they will appear here.</p><a class="btn" href="/shop/">Shop the collection</a></div>'}
+  <div class="card-box"><h3>Your name</h3><form class="inline-f" id="nf"><input name="n" value="${esc(prof.full_name || "")}" placeholder="Full name" maxlength="100"><button class="btn ghost sm">Save</button></form><p class="ok" id="nm" role="status"></p></div>`;
+  $("#so").onclick = () => { signOut(); loginForm(); };
+  $("#nf").onsubmit = async e => { e.preventDefault(); const r = await fetch(`${SB}/rest/v1/customer_profiles?user_id=eq.${user.id}`, { method: "PATCH", headers: { apikey: KEY, Authorization: "Bearer " + s.access_token, "content-type": "application/json" }, body: JSON.stringify({ full_name: e.target.n.value.trim() }) }); $("#nm").textContent = r.ok ? "Saved." : "Could not save."; };
+}
+if (hv?.error) loginForm("That sign-in link has expired or was already used. Please request a new one.");
+else { const s = await session(); s ? home(s) : loginForm(); }
+</script></body></html>

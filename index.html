@@ -1,9 +1,11 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Noctra | Christian apparel, made to order</title><meta name="description" content="Faith-inspired Christian apparel by Noctra, made to order and shipped worldwide."><meta name="theme-color" content="#0b0614">
+<meta property="og:type" content="website"><meta property="og:site_name" content="Noctra"><meta property="og:title" content="Noctra | Christian apparel, made to order"><meta property="og:description" content="Faith-inspired Christian apparel, made to order and shipped worldwide."><meta property="og:image" content="https://nexorealm.org/assets/og.png"><meta property="og:url" content="https://nexorealm.org/"><meta name="twitter:card" content="summary_large_image"><link rel="canonical" href="https://nexorealm.org/">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/site.css"></head><body><div id="hdr"></div><main id="main"><svg width="0" height="0" style="position:absolute"><defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6e3a1"/><stop offset="1" stop-color="#b8912f"/></linearGradient></defs></svg>
+<link rel="stylesheet" href="/assets/site.css"><script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","name":"Noctra","url":"https://nexorealm.org/","logo":"https://nexorealm.org/assets/logo-gold.png"},{"@type":"WebSite","name":"Noctra","url":"https://nexorealm.org/","potentialAction":{"@type":"SearchAction","target":"https://nexorealm.org/shop/?q={search_term_string}","query-input":"required name=search_term_string"}}]}</script>
+</head><body><div id="hdr"></div><main id="main"><svg width="0" height="0" style="position:absolute"><defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6e3a1"/><stop offset="1" stop-color="#b8912f"/></linearGradient></defs></svg>
 <section class="hero"><div><h1>Wear your faith <em>boldly.</em></h1>
 <p class="lead">Christian apparel with quiet confidence. Made to order and delivered to your door.</p>
 <div class="acts"><a class="btn" href="/shop/">Shop the collection</a><a class="btn ghost" href="/blog/">Read the journal</a></div>
@@ -20,9 +22,7 @@
 <section class="sec"><div class="hd"><h2>From the journal</h2><a class="link" href="/blog/">All posts</a></div><div class="bgrid" id="posts"></div></section>
 <section><div class="cta"><h2>Be first to the next drop.</h2><p class="note">New pieces, early access and nothing else.</p><span id="cta"></span></div></section>
 </main><div id="ftr"></div><script type="module">
-import {chrome} from "/assets/app.js"; chrome();
-
-import {rest,card,LIST,emptyShelf,waitlistForm,star,cross,money,esc,$} from "/assets/app.js";
+import {chrome, rest, card, LIST, emptyShelf, waitlistForm, star, cross, px, esc, skel, SITE, $} from "/assets/app.js"; chrome();
 $("#art").innerHTML = cross;
 ["f1","f2","f3"].forEach(i => $("#"+i).insertAdjacentHTML("afterbegin", star));
 $("#trust").innerHTML = ["Made to order","Worldwide shipping","Secure checkout"].map(t => `<span>${star}${t}</span>`).join("");
@@ -30,20 +30,35 @@ const words = ["Faith over fear","Light in the dark","Made to order","Shipped wo
 const run = words.map(w => `<span>${star}${w}</span>`).join("").repeat(4);
 $("#mq").innerHTML = `<div>${run}${run}</div>`;
 $("#cta").innerHTML = waitlistForm("cta");
+$("#grid").innerHTML = skel(4);
+const usable = p => p.product_images?.length && p.product_variants?.some(v => v.active);
+const minPrice = p => Math.min(...p.product_variants.filter(v => v.active).map(v => v.price_minor));
+function slideshow(slides) {
+  if (!slides.length) return;
+  const arch = $("#arch"); arch.removeAttribute("href"); arch.setAttribute("role", "group"); arch.setAttribute("aria-label", "Featured pieces");
+  arch.innerHTML = slides.map((s, n) => `<img class="sl${n ? "" : " on"}" src="${esc(s.url)}" alt="${esc(s.name)}"${n ? ' loading="lazy"' : ""}>`).join("") + (slides.length > 1 ? `<div class="dots">${slides.map((_, n) => `<button aria-label="Show photo ${n + 1}" class="${n ? "" : "on"}"></button>`).join("")}</div>` : "");
+  const go = n => {
+    arch.querySelectorAll(".sl").forEach((e, k) => e.classList.toggle("on", k === n));
+    arch.querySelectorAll(".dots button").forEach((e, k) => e.classList.toggle("on", k === n));
+    const s = slides[n]; arch.dataset.href = "/product/?s=" + encodeURIComponent(s.slug);
+    if (s.price) { $("#t1").innerHTML = `<b>${esc(s.name)}</b>From ${px(s.price, "ZAR")}`; $("#t1").hidden = false; }
+  };
+  $("#t2").hidden = false; go(0);
+  let cur = 0, timer = null;
+  const start = () => { if (slides.length > 1 && !matchMedia("(prefers-reduced-motion:reduce)").matches) timer = setInterval(() => go(cur = (cur + 1) % slides.length), 4800); };
+  arch.onclick = e => { const d = e.target.closest(".dots button"); if (d) { clearInterval(timer); go(cur = [...arch.querySelectorAll(".dots button")].indexOf(d)); return; } location.href = arch.dataset.href; };
+  arch.style.cursor = "pointer"; start();
+}
 try {
-  const p = await rest(LIST + "&limit=8");
+  const [p, hs] = await Promise.all([rest(LIST + "&limit=8"), rest("site_settings?key=eq.hero&select=value").catch(() => [])]);
   $("#grid").innerHTML = p.length ? p.map(card).join("") : emptyShelf();
-  const f = p.find(x => x.product_images?.length && x.product_variants?.some(v => v.active));
-  if (f) {
-    const im = [...f.product_images].sort((a, b) => a.sort - b.sort)[0], pr = Math.min(...f.product_variants.filter(v => v.active).map(v => v.price_minor));
-    $("#arch").href = "/product/?s=" + encodeURIComponent(f.slug); $("#arch").innerHTML = `<img src="${esc(im.url)}" alt="${esc(f.name)}">`;
-    $("#t1").innerHTML = `<b>${esc(f.name)}</b>From ${money(pr, f.currency)}`; $("#t1").hidden = false; $("#t2").hidden = false;
-  }
+  const byUrl = new Map(), prod = new Map(p.map(x => [x.slug, x]));
+  let slides = (hs[0]?.value?.items || []).filter(i => /^https:\/\//.test(i.url || "")).map(i => ({ url: i.url, slug: i.slug, name: i.name || "Noctra", price: prod.get(i.slug) && usable(prod.get(i.slug)) ? minPrice(prod.get(i.slug)) : 0 }));
+  if (!slides.length) for (const x of p.filter(usable)) { const im = [...x.product_images].sort((a, b) => a.sort - b.sort); for (const i of im.slice(0, 2)) slides.push({ url: i.url, slug: x.slug, name: x.name, price: minPrice(x) }); if (slides.length >= 6) break; }
+  slideshow(slides.slice(0, 8));
 } catch { $("#grid").innerHTML = emptyShelf(); }
 try {
   const b = await rest("posts?select=slug,title,excerpt,cover_url&published=eq.true&order=published_at.desc&limit=3");
-  if (b.length) $("#posts").innerHTML = b.map(bcard).join(""); else $("#posts").closest("section").remove();
+  if (b.length) $("#posts").innerHTML = b.map((p, i) => `<a class="bcard" style="--i:${i}" href="/blog/post/?s=${encodeURIComponent(p.slug)}"><div class="ph">${p.cover_url ? `<img src="${esc(p.cover_url)}" alt="" loading="lazy">` : star}</div><h3>${esc(p.title)}</h3><p>${esc(p.excerpt)}</p></a>`).join(""); else $("#posts").closest("section").remove();
 } catch { $("#posts").closest("section").remove(); }
-function bcard(p) { return `<a class="bcard" href="/blog/post/?s=${encodeURIComponent(p.slug)}"><div class="ph">${p.cover_url ? `<img src="${esc(p.cover_url)}" alt="" loading="lazy">` : star}</div><h3>${esc(p.title)}</h3><p>${esc(p.excerpt)}</p></a>`; }
-
 </script></body></html>

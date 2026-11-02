@@ -17,29 +17,31 @@
 <div class="sum" id="sum"></div></div></section></main><div id="ftr"></div><script type="module">
 import {chrome} from "/assets/app.js"; chrome();
 
-import {getCart,money,api,rest,esc,$} from "/assets/app.js";
+import {SB,KEY} from "/assets/config.js";
+import {getCart,money,px,chargeNote,refreshPx,api,esc,COUNTRIES,countryName,guessCountry,shippingCountries,session,$} from "/assets/app.js";
 const cart = getCart();
 if (!cart.length) location.replace("/cart/");
 const items = cart.map(i => ({ variantId: i.id, qty: i.qty }));
 const cur = cart[0]?.cur || "ZAR";
 let key = crypto.randomUUID();
-const NAMES = { ZA: "South Africa", US: "United States", CA: "Canada", GB: "United Kingdom", IE: "Ireland", AU: "Australia", NZ: "New Zealand", DE: "Germany", FR: "France", NL: "Netherlands" };
 try {
-  const [s] = await rest("site_settings?key=eq.shipping&select=value");
-  const cs = Object.keys(s.value.countries);
-  $("#country").innerHTML = '<option value="">Select country</option>' + cs.map(c => `<option value="${c}">${NAMES[c] || new Intl.DisplayNames(["en"], { type: "region" }).of(c)}</option>`).join("");
+  const cs = await shippingCountries();
+  $("#country").innerHTML = '<option value="">Select country</option>' + cs.map(c => `<option value="${c}">${esc(countryName(c))}</option>`).join("");
+  const g = guessCountry(); if (cs.includes(g)) { $("#country").value = g; }
+  if (localStorage.noctra_code) $("#code").value = localStorage.noctra_code;
 } catch { $("#err").textContent = "Could not load shipping options. Please refresh."; }
+session().then(async s => { if (!s) return; try { const u = await (await fetch(SB + "/auth/v1/user", { headers: { apikey: KEY, Authorization: "Bearer " + s.access_token } })).json(); if (u.email && !$("#form").email.value) $("#form").email.value = u.email; } catch {} });
 const MSG = { country_not_supported: "We don't ship to that country yet.", item_unavailable: "An item in your bag is no longer available. Remove it from your bag and try again.", item_not_orderable: "An item in your bag can't be ordered right now. Please contact us.", invalid_code: "That discount code isn't valid.", payment_unavailable: "Payment is unavailable right now. Please try again in a moment.", rate_limited: "Too many attempts. Please wait a few minutes.", invalid_email: "Please enter a valid email address.", invalid_address: "Please check your delivery details.", shipping_not_configured: "Shipping isn't set up yet. Please check back soon.", not_configured: "Checkout isn't switched on yet. Please check back soon." };
 const say = e => $("#err").textContent = MSG[e.code] || "Something went wrong. Please try again.";
-const draw = q => { $("#sum").innerHTML = `<h3>Order summary</h3>${cart.map(i => `<div class="l"><span>${esc(i.name)} (${esc(i.title)}) x ${i.qty}</span><span>${money(i.price * i.qty, i.cur)}</span></div>`).join("")}
-  ${q ? `<div class="l"><span>Shipping</span><span>${money(q.shippingMinor, q.currency)}</span></div>${q.discountMinor ? `<div class="l"><span>Discount</span><span>-${money(q.discountMinor, q.currency)}</span></div>` : ""}<div class="l t"><span>Total</span><span>${money(q.totalMinor, q.currency)}</span></div>` : '<p class="note">Choose a country to see shipping and your total.</p>'}`; };
+const draw = q => { $("#sum").innerHTML = `<h3>Order summary</h3>${cart.map(i => `<div class="l"><span>${esc(i.name)} (${esc(i.title)}) x ${i.qty}</span><span>${px(i.price * i.qty, i.cur)}</span></div>`).join("")}
+  ${q ? `<div class="l"><span>Shipping</span><span>${money(q.shippingMinor, q.currency)}</span></div>${q.discountMinor ? `<div class="l"><span>Discount</span><span>-${money(q.discountMinor, q.currency)}</span></div>` : ""}<div class="l t"><span>Total</span><span>${money(q.totalMinor, q.currency)}</span></div>${chargeNote}` : '<p class="note">Choose a country to see shipping and your total.</p>'}`; refreshPx(); };
 draw();
 async function quote() {
-  const country = $("#country").value, discountCode = $("#code").value.trim().toUpperCase(); $("#err").textContent = "";
+  const country = $("#country").value; if (country) localStorage.noctra_cc = country; const discountCode = $("#code").value.trim().toUpperCase(); $("#err").textContent = "";
   if (!country) return draw();
   try { draw(await api("quote", { items, country, discountCode })); } catch (e) { say(e); draw(); }
 }
-$("#country").onchange = quote; $("#apply").onclick = quote;
+$("#country").onchange = quote; if ($("#country").value) quote(); $("#apply").onclick = quote;
 $("#form").onsubmit = async e => {
   e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); $("#pay").disabled = true; $("#err").textContent = "";
   try {

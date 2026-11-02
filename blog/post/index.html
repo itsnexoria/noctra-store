@@ -4,13 +4,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/site.css"></head><body><div id="hdr"></div><main id="main"><section class="pg"><article class="post" id="p"><p class="note">Loading...</p></article></section></main><div id="ftr"></div><script type="module">
-import {chrome} from "/assets/app.js"; chrome();
-
-import {rest,md,esc,$} from "/assets/app.js";
+import {chrome, rest, md, esc, seo, SITE, LIST, card, $} from "/assets/app.js"; chrome();
 const s = new URLSearchParams(location.search).get("s") || "";
 let p = null; try { [p] = await rest(`posts?slug=eq.${encodeURIComponent(s)}&published=eq.true&select=*`); } catch {}
-if (!p) $("#p").innerHTML = '<h1>Post not found</h1><p><a class="btn" href="/blog/">Back to the journal</a></p>';
-else { document.title = p.title + " | Noctra"; document.querySelector('meta[name=description]').content = p.excerpt;
-  $("#p").innerHTML = `<p class="note">${new Date(p.published_at).toLocaleDateString("en-ZA",{day:"numeric",month:"long",year:"numeric"})}</p><h1>${esc(p.title)}</h1>${p.cover_url ? `<img class="cover" src="${esc(p.cover_url)}" alt="">` : ""}${md(p.body)}<p style="margin-top:40px"><a class="btn ghost" href="/blog/">More from the journal</a></p>`; }
-
+if (!p) { $("#p").innerHTML = '<h1>Post not found</h1><p><a class="btn" href="/blog/">Back to the journal</a></p>'; document.head.insertAdjacentHTML("beforeend", '<meta name="robots" content="noindex">'); }
+else {
+  const url = `${SITE}/blog/post/?s=${encodeURIComponent(p.slug)}`, mins = Math.max(1, Math.round(p.body.split(/\s+/).length / 200));
+  seo({ title: p.title + " | Noctra", description: p.excerpt, image: p.cover_url, url, ld: { "@context": "https://schema.org", "@type": "Article", headline: p.title, description: p.excerpt, image: p.cover_url ? [p.cover_url] : undefined, datePublished: p.published_at, dateModified: p.updated_at, author: { "@type": "Organization", name: "Noctra" }, publisher: { "@type": "Organization", name: "Noctra" }, mainEntityOfPage: url } });
+  $("#p").innerHTML = `<p class="meta">${new Date(p.published_at).toLocaleDateString("en-ZA",{day:"numeric",month:"long",year:"numeric"})} &middot; ${mins} min read</p><h1>${esc(p.title)}</h1>${p.cover_url ? `<img class="cover" src="${esc(p.cover_url)}" alt="">` : ""}${md(p.body)}
+  <p style="margin-top:40px"><a class="btn" href="/shop/">Shop the collection</a> <a class="btn ghost" href="/blog/">More from the journal</a></p>`;
+  try {
+    const more = await rest("posts?select=slug,title,excerpt&published=eq.true&slug=neq." + encodeURIComponent(p.slug) + "&order=published_at.desc&limit=2");
+    if (more.length) $("#p").insertAdjacentHTML("beforeend", `<h2 style="margin-top:60px">Keep reading</h2>${more.map(m => `<p><a class="link" href="/blog/post/?s=${encodeURIComponent(m.slug)}"><b>${esc(m.title)}</b></a><br><span class="note">${esc(m.excerpt)}</span></p>`).join("")}`);
+  } catch {}
+}
 </script></body></html>

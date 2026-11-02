@@ -1,0 +1,18 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Track your order | Noctra</title><meta name="description" content="Check the status of your Noctra order with your order number and email."><meta name="theme-color" content="#0f0819">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css"><meta name="robots" content="noindex"><meta name="robots" content="noindex"></head><body><div id="hdr"></div><main id="main">
+<section class="pg"><h1 style="font-size:clamp(2.2rem,5vw,3.6rem)">Track your order</h1><p class="note">Enter the order number from your confirmation email (it starts with NX) and the email you used at checkout.</p>
+<form class="inline-f col" id="tf" style="max-width:420px;margin:22px 0"><input name="ref" placeholder="Order number, e.g. NXABCD1234" required maxlength="10" style="text-transform:uppercase" autocomplete="off"><input name="email" type="email" placeholder="Email address" required autocomplete="email"><button class="btn">Find my order</button></form>
+<p class="err" id="te" role="alert"></p><div id="o" class="prose"></div></section></main><div id="ftr"></div><script type="module">
+import {chrome, acct, esc, orderView, $} from "/assets/app.js"; chrome();
+const f = $("#tf"); const r0 = new URLSearchParams(location.search).get("ref"); if (r0) f.ref.value = r0.toUpperCase();
+f.onsubmit = async e => {
+  e.preventDefault(); $("#te").textContent = ""; $("#o").innerHTML = ""; const b = f.querySelector("button"); b.disabled = true;
+  try { const d = await acct("lookup", { ref: f.ref.value.trim(), email: f.email.value.trim() }); $("#o").innerHTML = orderView(d); $("#o").scrollIntoView({ behavior: "smooth" }); }
+  catch (er) { $("#te").textContent = er.code === "rate_limited" ? "Too many attempts. Please wait a few minutes and try again." : "We couldn't find an order with those details. Check the number and email and try again."; }
+  b.disabled = false;
+};
+</script></body></html>

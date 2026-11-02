@@ -1,0 +1,11 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unsubscribed | Noctra</title><meta name="description" content="Email preferences."><meta name="theme-color" content="#0f0819">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css"><meta name="robots" content="noindex"><meta name="robots" content="noindex"></head><body><div id="hdr"></div><main id="main">
+<section class="pg"><div class="prose" id="u"></div></section></main><div id="ftr"></div><script type="module">
+import {chrome, $} from "/assets/app.js"; chrome();
+const bad = new URLSearchParams(location.search).has("error");
+$("#u").innerHTML = bad ? "<h2>That link didn't work</h2><p>The unsubscribe link looks incomplete. Please contact us and we'll remove you right away.</p>" : "<h2>You're unsubscribed</h2><p>We won't send you any more bag reminders. Order confirmations and shipping updates for purchases you make will still reach you.</p>";
+</script></body></html>

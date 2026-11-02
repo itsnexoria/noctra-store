@@ -4,37 +4,77 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/site.css"></head><body><div id="hdr"></div><main id="main">
-<section class="pdp" id="pdp"><p>Loading...</p></section></main><div id="ftr"></div><script type="module">
-import {chrome} from "/assets/app.js"; chrome();
-
-import {rest,addToCart,money,esc,$} from "/assets/app.js";
+<section class="pdp" id="pdp"><div><div class="main sk"><div class="ph" style="width:100%;height:100%"></div></div></div><div class="info"><div class="sk-line" style="width:70%;height:2em"></div><div class="sk-line" style="width:30%"></div><div class="sk-line" style="width:90%"></div><div class="sk-line" style="width:80%"></div></div></section>
+<section class="shelf" id="rel" hidden><h2>You may also like</h2><div class="mini" id="relg"></div></section>
+<section class="shelf" id="rv" hidden><h2>Recently viewed</h2><div class="mini" id="rvg"></div></section>
+</main><div class="stick" id="stick" hidden><div><b id="sn"></b><span class="pr" id="spr"></span></div><button class="btn" id="sadd">Add to bag</button></div><div id="ftr"></div><script type="module">
+import {chrome, rest, addToCart, px, esc, fmtDesc, cleanDesc, rvGet, rvPush, card, LIST, seo, SITE, $} from "/assets/app.js"; chrome();
 const slug = new URLSearchParams(location.search).get("s");
 const root = $("#pdp");
 let p = null;
-try { [p] = await rest(`products?slug=eq.${encodeURIComponent(slug || "")}&select=*,product_images(url,alt,sort),product_variants(id,title,options,price_minor,currency,active)`); } catch {}
-if (!p) { root.innerHTML = '<div><h2>Product not found</h2><a class="btn" href="/shop/">Back to shop</a></div>'; }
+try { [p] = await rest(`products?slug=eq.${encodeURIComponent(slug || "")}&select=*,collection:collections(slug,title),product_images(url,alt,sort),product_variants(id,title,options,price_minor,currency,active)`); } catch {}
+if (!p) { root.innerHTML = '<div><h2>Product not found</h2><a class="btn" href="/shop/">Back to shop</a></div>'; document.head.insertAdjacentHTML("beforeend", '<meta name="robots" content="noindex">'); }
 else {
-  document.title = p.name + " | Noctra";
   const imgs = p.product_images.sort((a, b) => a.sort - b.sort);
   const vs = p.product_variants.filter(v => v.active);
   vs.forEach(v => { if (!v.options || !Object.keys(v.options).length) v.options = { Option: v.title }; });
   const names = [...new Set(vs.flatMap(v => Object.keys(v.options)))];
   const sel = {}; names.forEach(n => sel[n] = vs[0]?.options[n]);
   const cur = () => vs.find(v => names.every(n => v.options[n] === sel[n]));
+  const prices = vs.map(v => v.price_minor), lo = Math.min(...prices), hi = Math.max(...prices);
+  const sg = p.size_guide && p.size_guide.rows?.length ? p.size_guide : null;
+  const desc = cleanDesc(p.description);
   root.innerHTML = `<div><div class="main"><img id="big" alt="${esc(p.name)}" src="${esc(imgs[0]?.url || "")}"></div>
     <div class="thumbs">${imgs.map((i, n) => `<button class="${n ? "" : "on"}" data-u="${esc(i.url)}" aria-label="View ${n + 1}"><img src="${esc(i.url)}" alt="" loading="lazy"></button>`).join("")}</div></div>
-    <div class="info"><h1 style="font-size:clamp(2.2rem,4vw,3.2rem)">${esc(p.name)}</h1><p class="price" id="price"></p>
-    ${names.map(n => `<div class="og"><b>${esc(n)}</b><div class="opts" data-n="${esc(n)}">${[...new Set(vs.map(v => v.options[n]))].map(o => `<button class="opt${sel[n] === o ? " on" : ""}" data-v="${esc(o)}">${esc(o)}</button>`).join("")}</div></div>`).join("")}
-    <button class="btn" id="add" style="width:100%">Add to bag</button><p class="note" id="msg"></p>
+    <div class="info">${p.collection ? `<p class="note" style="margin:0 0 6px"><a class="link" href="/shop/?c=${esc(p.collection.slug)}">${esc(p.collection.title)}</a></p>` : ""}<h1 style="font-size:clamp(2.2rem,4vw,3.2rem)">${esc(p.name)}</h1><p class="price" id="price"></p>
+    ${names.map(n => `<div class="og"><b>${esc(n.replace(/^(Bella \+ Canvas|Gildan)\s+/i, ""))}</b><div class="opts" data-n="${esc(n)}">${[...new Set(vs.map(v => v.options[n]))].map(o => `<button class="opt${sel[n] === o ? " on" : ""}" data-v="${esc(o)}">${esc(o)}</button>`).join("")}</div></div>`).join("")}
+    ${sg ? '<button class="link sgbtn" id="sgb">Size guide &amp; fit</button>' : ""}
+    <button class="btn" id="add" style="width:100%">Add to bag</button><p class="note" id="msg" role="status"></p>
     ${p.production_days_min ? `<p class="note">Printed to order in ${p.production_days_min}-${p.production_days_max} business days, then shipped to you.</p>` : ""}
-    <p class="desc">${esc(p.description)}</p><p class="note">Made to order. Read our <a class="link" href="/shipping/">shipping</a> and <a class="link" href="/refunds/">refund</a> policies.</p>${p.fit_notes ? `<p class="note"><b>Fit.</b> ${esc(p.fit_notes)}</p>` : ""}</div>`;
-  const upd = () => { const v = cur(); $("#price").textContent = v ? money(v.price_minor, v.currency) : "Not available in this combination"; $("#add").disabled = !v; };
-  upd();
+    <div class="desc">${fmtDesc(p.description)}</div><p class="note">Made to order. Read our <a class="link" href="/shipping/">shipping</a> and <a class="link" href="/refunds/">refund</a> policies.</p>${p.fit_notes ? `<p class="note"><b>Fit.</b> ${esc(p.fit_notes)}</p>` : ""}</div>`;
+  const upd = () => { const v = cur(); $("#price").innerHTML = v ? px(v.price_minor, v.currency) : "Not available in this combination"; $("#add").disabled = !v; $("#sadd").disabled = !v; $("#spr").innerHTML = v ? px(v.price_minor, v.currency) : ""; };
+  $("#sn").textContent = p.name; upd();
+  const add = () => { const v = cur(); if (!v) return; addToCart({ id: v.id, qty: 1, name: p.name, title: v.title, price: v.price_minor, cur: v.currency, img: imgs[0]?.url || "", slug: p.slug }); $("#msg").textContent = "Added to your bag."; };
   root.onclick = e => {
     const t = e.target.closest(".thumbs button"); if (t) { $("#big").src = t.dataset.u; root.querySelectorAll(".thumbs button").forEach(b => b.classList.toggle("on", b === t)); }
     const o = e.target.closest(".opt"); if (o) { sel[o.parentNode.dataset.n] = o.dataset.v; o.parentNode.querySelectorAll(".opt").forEach(b => b.classList.toggle("on", b === o)); upd(); }
-    if (e.target.id === "add") { const v = cur(); if (!v) return; addToCart({ id: v.id, qty: 1, name: p.name, title: v.title, price: v.price_minor, cur: v.currency, img: imgs[0]?.url || "", slug: p.slug }); $("#msg").innerHTML = 'Added. <a class="link" href="/cart/">View bag</a>'; }
+    if (e.target.id === "add") add();
+    if (e.target.id === "sgb") sizeGuide(sg);
   };
+  // sticky mobile add-to-bag
+  const stick = $("#stick"); stick.hidden = false; document.body.classList.add("has-stick"); $("#sadd").onclick = add;
+  new IntersectionObserver(([en]) => stick.classList.toggle("show", !en.isIntersecting && en.boundingClientRect.top < 0), { threshold: 0 }).observe($("#add"));
+  // SEO
+  const url = `${SITE}/product/?s=${encodeURIComponent(p.slug)}`, blurb = desc.slice(0, 155);
+  seo({ title: p.name + " | Noctra", description: blurb, image: imgs[0]?.url, url, ld: { "@context": "https://schema.org", "@type": "Product", name: p.name, description: desc.slice(0, 500), image: imgs.slice(0, 6).map(i => i.url), brand: { "@type": "Brand", name: "Noctra" }, url,
+    offers: { "@type": "AggregateOffer", priceCurrency: "ZAR", lowPrice: (lo / 100).toFixed(2), highPrice: (hi / 100).toFixed(2), offerCount: vs.length, availability: "https://schema.org/InStock", url } } });
+  // related + recently viewed
+  const prev = rvGet().filter(x => x !== p.slug); rvPush(p.slug);
+  try {
+    const others = await rest(LIST + `&slug=neq.${encodeURIComponent(p.slug)}&limit=40`);
+    const score = o => (o.collection?.slug && o.collection.slug === p.collection?.slug ? 3 : 0) + (o.tags || []).filter(t => (p.tags || []).includes(t)).length;
+    const rel = others.filter(o => o.product_variants?.some(v => v.active)).sort((a, b) => score(b) - score(a)).slice(0, 4);
+    if (rel.length) { $("#relg").innerHTML = rel.map(card).join(""); $("#rel").hidden = false; }
+    const ids = prev.slice(0, 4);
+    if (ids.length) {
+      const rv = await rest(LIST + `&slug=in.(${ids.map(encodeURIComponent).join(",")})`);
+      rv.sort((a, b) => ids.indexOf(a.slug) - ids.indexOf(b.slug));
+      if (rv.length) { $("#rvg").innerHTML = rv.map(card).join(""); $("#rv").hidden = false; }
+    }
+  } catch {}
 }
-
+function sizeGuide(g) {
+  let unit = g.unit || "in";
+  const draw = () => {
+    const f = v => unit === "cm" ? (v * 2.54).toFixed(1) : v;
+    m.innerHTML = `<div role="dialog" aria-modal="true" aria-label="Size guide"><div class="bar"><h3>Size guide</h3><span><button class="chip${unit === "in" ? " on" : ""}" data-u="in">in</button> <button class="chip${unit === "cm" ? " on" : ""}" data-u="cm">cm</button> <button class="bd-x" aria-label="Close">&times;</button></span></div>
+    <table><tr><th>Size</th>${g.columns.map(c => `<th>${esc(c)} (${unit})</th>`).join("")}</tr>${g.rows.map(r => `<tr><td><b>${esc(r.size)}</b></td>${r.v.map(x => `<td>${f(x)}</td>`).join("")}</tr>`).join("")}</table>
+    <p class="note" style="margin-top:14px">${esc(g.note || "")}</p><p class="note"><b>How to measure:</b> lay a tee you already love flat and measure straight across the chest (width) and from the top of the shoulder down (length). Compare with the numbers above.</p></div>`;
+    m.querySelector(".bd-x").focus();
+  };
+  const m = document.createElement("div"); m.className = "modal"; document.body.append(m); draw();
+  const close = () => { m.remove(); document.removeEventListener("keydown", esc2); };
+  const esc2 = e => { if (e.key === "Escape") close(); }; document.addEventListener("keydown", esc2);
+  m.onclick = e => { if (e.target === m || e.target.closest(".bd-x")) return close(); const u = e.target.closest("[data-u]"); if (u) { unit = u.dataset.u; draw(); } };
+}
 </script></body></html>

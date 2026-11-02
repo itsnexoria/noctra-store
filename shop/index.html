@@ -4,18 +4,49 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/site.css"></head><body><div id="hdr"></div><main id="main">
-<section class="sec"><div class="hd"><h2>Shop</h2></div><div class="chips" id="chips"></div><div class="grid" id="grid"></div></section></main><div id="ftr"></div><script type="module">
-import {chrome} from "/assets/app.js"; chrome();
-
-import {rest,card,LIST,emptyShelf,esc,$} from "/assets/app.js";
-let all = [], tag = "";
-const draw = () => { const l = tag ? all.filter(p => (p.tags||[]).includes(tag)) : all; $("#grid").innerHTML = l.length ? l.map(card).join("") : emptyShelf(); };
+<section class="sec"><div class="hd"><h2 id="ttl">Shop</h2></div><p class="note" id="cdesc"></p>
+<div class="chips" id="chips"></div>
+<div class="tools"><input class="inp" id="q" type="search" placeholder="Search the collection" aria-label="Search"><select class="inp" id="sort" aria-label="Sort"><option value="new">Newest</option><option value="lo">Price: low to high</option><option value="hi">Price: high to low</option><option value="az">Name: A to Z</option></select></div>
+<div class="fgrp" id="fg" hidden><label>Up to <b id="pv"></b><br><input type="range" id="pr" aria-label="Maximum price"></label><div class="chips" id="cols" style="margin:0"></div></div>
+<p class="count" id="cnt" role="status"></p><div class="grid" id="grid"></div></section></main><div id="ftr"></div><script type="module">
+import {chrome, rest, card, LIST, emptyShelf, esc, px, skel, seo, SITE, $} from "/assets/app.js"; chrome();
+const qs = new URLSearchParams(location.search);
+const st = { c: qs.get("c") || "", col: qs.get("col") || "", q: qs.get("q") || "", sort: qs.get("sort") || "new", max: +qs.get("max") || 0 };
+let all = [], cols = [];
+$("#grid").innerHTML = skel(8);
+const minP = p => { const v = (p.product_variants || []).filter(v => v.active).map(v => v.price_minor); return v.length ? Math.min(...v) : 0; };
+const colourOf = p => [...new Set((p.product_variants || []).filter(v => v.active).flatMap(v => Object.entries(v.options || {}).filter(([k]) => /colou?r/i.test(k)).map(([, x]) => x)))];
+const sync = () => { const u = new URLSearchParams(); for (const [k, v] of Object.entries(st)) if (v && !(k === "sort" && v === "new") && !(k === "max" && v >= +$("#pr").max)) u.set(k, v); history.replaceState(null, "", location.pathname + (u.size ? "?" + u : "")); };
+function draw() {
+  const q = st.q.toLowerCase();
+  let l = all.filter(p => (!st.c || p.collection?.slug === st.c) && (!st.col || colourOf(p).includes(st.col)) && (!st.max || minP(p) <= st.max) && (!q || (p.name + " " + (p.tags || []).join(" ")).toLowerCase().includes(q)));
+  l.sort(st.sort === "lo" ? (a, b) => minP(a) - minP(b) : st.sort === "hi" ? (a, b) => minP(b) - minP(a) : st.sort === "az" ? (a, b) => a.name.localeCompare(b.name) : (a, b) => b.created_at.localeCompare(a.created_at));
+  $("#grid").innerHTML = l.length ? l.map(card).join("") : (all.length ? '<p class="note" style="grid-column:1/-1">Nothing matches those filters. <button class="link" id="clr">Clear filters</button></p>' : emptyShelf());
+  $("#cnt").textContent = all.length ? `${l.length} ${l.length === 1 ? "piece" : "pieces"}` : "";
+  const cc = cols.find(x => x.slug === st.c); $("#ttl").textContent = cc ? cc.title : "Shop"; $("#cdesc").textContent = cc?.description || "";
+  seo({ title: (cc ? cc.title + " | " : "Shop | ") + "Noctra", description: cc?.description || "Faith-inspired Christian apparel, made to order and shipped worldwide.", url: SITE + "/shop/" });
+  sync();
+}
 try {
-  all = await rest(LIST + "&limit=100");
-  const tags = [...new Set(all.flatMap(p => p.tags || []))].slice(0, 12);
-  if (tags.length) { $("#chips").innerHTML = ["", ...tags].map(t => `<button class="chip${t ? "" : " on"}" data-t="${esc(t)}">${t ? esc(t) : "All"}</button>`).join("");
-    $("#chips").onclick = e => { const b = e.target.closest(".chip"); if (!b) return; tag = b.dataset.t; document.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c === b)); draw(); }; }
+  all = await rest(LIST + "&limit=200");
+  const have = new Set(all.map(p => p.collection?.slug).filter(Boolean));
+  cols = (await rest("collections?select=slug,title,description&published=eq.true&order=sort")).filter(c => have.has(c.slug));
+  if (cols.length) { $("#chips").innerHTML = [{ slug: "", title: "All" }, ...cols].map(c => `<button class="chip${c.slug === st.c ? " on" : ""}" data-c="${esc(c.slug)}">${esc(c.title)}</button>`).join(""); }
+  const prices = all.map(minP).filter(Boolean), top = Math.max(...prices, 0);
+  if (all.length > 1 && top) {
+    const r = $("#pr"); r.min = Math.min(...prices); r.max = top; r.step = 500; r.value = st.max || top; $("#fg").hidden = false;
+    const pv = () => $("#pv").innerHTML = px(+r.value, "ZAR"); pv();
+    r.oninput = () => { st.max = +r.value >= +r.max ? 0 : +r.value; pv(); draw(); };
+    const counts = {}; all.flatMap(colourOf).forEach(c => counts[c] = (counts[c] || 0) + 1);
+    const top2 = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 14).map(x => x[0]);
+    if (top2.length) $("#cols").innerHTML = ["", ...top2].map(c => `<button class="chip${c === st.col ? " on" : ""}" data-col="${esc(c)}">${c ? esc(c) : "Any colour"}</button>`).join(""); else $("#cols").remove();
+  }
 } catch {}
+$("#q").value = st.q; $("#sort").value = st.sort;
+$("#chips").onclick = e => { const b = e.target.closest("[data-c]"); if (!b) return; st.c = b.dataset.c; $("#chips").querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c === b)); draw(); };
+$("#cols").onclick = e => { const b = e.target.closest("[data-col]"); if (!b) return; st.col = b.dataset.col; $("#cols").querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c === b)); draw(); };
+$("#q").oninput = e => { st.q = e.target.value.trim(); draw(); };
+$("#sort").onchange = e => { st.sort = e.target.value; draw(); };
+$("#grid").onclick = e => { if (e.target.id === "clr") { Object.assign(st, { c: "", col: "", q: "", max: 0 }); $("#q").value = ""; location.search = ""; } };
 draw();
-
 </script></body></html>
