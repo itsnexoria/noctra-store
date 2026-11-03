@@ -24,3 +24,14 @@ Shipping prices live in Supabase table `site_settings` (key `shipping`, amounts 
 4. **Journal:** five scripture drafts are in the admin Journal tab. Read them, edit if you like, then tick Published.
 5. **Hero photos:** admin > Hero photos to choose the home page slideshow.
 6. **Cron jobs** (already created in Supabase): `noctra-cart-recovery` (every 30 min), `noctra-fulfilment-health` (hourly).
+
+## v3 features: one-time setup
+
+1. **Reviews:** nothing to configure. A review request is emailed 7 days after a South African order ships (14 days for other countries). Hide reviews under Admin > Reviews.
+2. **Back-in-stock:** customers can ask to be told about a sold-out size or colour. A variant counts as sold out when Printify stops offering it, which is detected when you press Sync in the admin (or when you untick "on sale" in Products).
+3. **Wishlist / accounts:** same Supabase Auth setup as in the v2 notes.
+4. **Refunds:** Admin > Orders > click an order > Cancel & refund / Partial refund. Needs the `PAYSTACK_SECRET_KEY` secret (already used for payments). Full refunds also cancel the Printify order when Printify still allows it.
+5. **Journal:** new posts can be scheduled with a future "Publish on" date, and each post can show a "Shop this verse" piece.
+6. **Product feed (Google Merchant Center, Pinterest, Meta/Instagram):** `https://nexorealm.org/feeds/products.xml`. In Merchant Center: Products > Feeds > add a scheduled fetch of that URL, country South Africa, language English. Pinterest: Catalogs > Add data source > paste the same URL. Instagram Shopping: add it as a data feed in Meta Commerce Manager.
+7. **Analytics notice (optional):** put your Cloudflare Web Analytics token in `ANALYTICS_TOKEN` in `assets/config.js`. The cookie notice and footer "Cookie settings" link then appear and analytics loads only after consent. Leave it empty for no analytics and no notice.
+8. **Cron jobs** (created in Supabase): `noctra-customer-mail` (every 30 minutes: review requests and back-in-stock emails).

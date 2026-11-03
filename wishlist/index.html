@@ -1,0 +1,18 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Saved pieces | Noctra</title><meta name="description" content="Pieces you have saved at Noctra."><meta name="theme-color" content="#0f0819">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css"><meta name="robots" content="noindex"><meta name="robots" content="noindex"></head><body><div id="hdr"></div><main id="main">
+<section class="sec"><div class="hd"><h1 style="font-size:clamp(2.2rem,5vw,3.4rem);margin:0">Saved pieces</h1></div><p class="note" id="wn"></p><div class="grid" id="g" aria-live="polite"></div></section></main><div id="ftr"></div><script type="module">
+import {chrome, rest, card, LIST, wlGet, loadRatings, esc, skel, $} from "/assets/app.js"; chrome();
+async function draw() {
+  const l = wlGet(); if (!l.length) { $("#g").innerHTML = '<div style="grid-column:1/-1"><p>You have not saved anything yet. Tap the heart on a piece you love and it will wait for you here.</p><a class="btn" href="/shop/">Shop the collection</a></div>'; $("#wn").textContent = ""; return; }
+  $("#g").innerHTML = skel(Math.min(l.length, 4));
+  await loadRatings();
+  try { const p = await rest(LIST + `&slug=in.(${l.map(x => encodeURIComponent(x.s)).join(",")})`); $("#g").innerHTML = p.length ? p.map(card).join("") : ""; $("#wn").textContent = p.length === 1 ? "1 saved piece" : p.length + " saved pieces"; }
+  catch { $("#g").innerHTML = '<p class="note">Could not load your saved pieces. Please refresh.</p>'; }
+}
+draw(); $("#g").addEventListener("click", e => { if (e.target.closest(".heart")) setTimeout(draw, 150); });
+$("#wn").insertAdjacentHTML("afterend", '<p class="note">Saved on this device. <a class="link" href="/account/">Sign in</a> to keep them on every device.</p>');
+</script></body></html>

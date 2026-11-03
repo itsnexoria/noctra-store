@@ -5,3 +5,5 @@ export const CONTACT_EMAIL = "griesel050@gmail.com";
 export const BUSINESS_NAME = "Nexoria";
 export const BUSINESS_ADDRESS = "1141 Deysel Street, Booysens, Pretoria, South Africa"; // e.g. "12 Example Street, Pretoria, 0001, South Africa"
 export const SITE = "https://nexorealm.org";
+// Cloudflare Web Analytics token (Cloudflare dashboard > Web Analytics). Leave empty to run with no analytics and no cookie notice.
+export const ANALYTICS_TOKEN = "";

@@ -32,11 +32,38 @@ function login(msg = "") {
     try { const a = await get("admin_roles?select=role"); if (!a.length) throw 0; shell(); } catch { sessionStorage.removeItem("noctra_at"); tok = ""; login("This account isn't an admin."); }
   };
 }
-const TABS = { overview: "Overview", sales: "Sales", orders: "Orders", products: "Products", collections: "Collections", hero: "Hero photos", blog: "Journal", discounts: "Discounts", waitlist: "Subscribers", settings: "Shipping" };
+const TABS = { overview: "Overview", sales: "Sales", orders: "Orders", products: "Products", collections: "Collections", hero: "Hero photos", reviews: "Reviews", blog: "Journal", discounts: "Discounts", waitlist: "Subscribers", settings: "Shipping" };
 function shell() {
   root.innerHTML = `<div class="adm"><aside>${Object.entries(TABS).map(([k, v]) => `<button data-t="${k}" class="${k === tab ? "on" : ""}">${v}</button>`).join("")}<button id="out" style="margin-top:10px">Sign out</button></aside><div id="pn"></div></div>`;
   root.querySelector("aside").onclick = e => { const b = e.target.closest("button"); if (!b) return; if (b.id === "out") { sessionStorage.removeItem("noctra_at"); tok = ""; return login(); } tab = b.dataset.t; sessionStorage.noctra_tab = tab; shell(); };
   VIEWS[tab]().catch(e => e.auth ? (sessionStorage.removeItem("noctra_at"), login("Session expired. Sign in again.")) : $("#pn").innerHTML = `<p class="err">${esc(e.message)}</p>`);
+}
+const orderActions = x => {
+  const paid = x.payment_status === "paid" && !["refunded", "cancelled"].includes(x.status), unpaid = ["unpaid", "pending", "failed", "abandoned"].includes(x.payment_status) && x.status !== "cancelled";
+  return paid ? `<p style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn ghost sm" data-oa="refund">${["shipped", "delivered"].includes(x.status) ? "Refund" : "Cancel &amp; refund"}</button><button class="btn ghost sm" data-oa="partial">Partial refund</button></p><p class="note">Refunds go back to the customer's card through Paystack. If the print order has not started, it is cancelled at Printify too.</p>`
+    : unpaid ? '<p style="margin-top:16px"><button class="btn ghost sm" data-oa="cancel">Cancel unpaid order</button></p>' : "";
+};
+async function adminFn(body) {
+  const r = await fetch(`${SB}/functions/v1/admin-orders`, { method: "POST", headers: { apikey: KEY, Authorization: "Bearer " + tok, "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (r.status === 401) throw Object.assign(new Error("auth"), { auth: 1 });
+  return r.json().catch(() => ({ ok: false, message: "Unexpected response." }));
+}
+async function orderAction(kind, x) {
+  const total = money(x.total_minor, x.currency);
+  let body = { orderId: x.id };
+  if (kind === "cancel") { if (!confirm(`Cancel unpaid order ${x.public_ref}?`)) return; body.action = "cancel"; }
+  else {
+    body.action = "refund";
+    if (kind === "partial") { const a = prompt(`Refund how many rand? (order total ${total})`); if (a === null) return; const n = Math.round(parseFloat(String(a).replace(",", ".")) * 100); if (!n || n < 100) return toast("Enter a valid amount"); body.amountMinor = n; if (n === x.total_minor) delete body.amountMinor; }
+    const amt = body.amountMinor ? money(body.amountMinor, x.currency) : total;
+    if (!confirm(`Refund ${amt} to ${x.email} for order ${x.public_ref}? This sends real money back through Paystack and cannot be undone.`)) return;
+    body.note = prompt("Reason (kept in the audit log)", "Customer request") || "";
+  }
+  try {
+    let r = await adminFn(body);
+    if (!r.ok && ["printify_in_production", "already_shipped"].includes(r.error) && confirm(r.message + "\n\nRefund anyway?")) r = await adminFn({ ...body, force: true });
+    toast(r.message || (r.ok ? "Done" : "Could not complete")); if (r.ok) shell();
+  } catch (e) { if (e.auth) return login(); toast("Could not reach the server"); }
 }
 const sgText = g => g?.rows?.length ? [["Size", ...g.columns].join(","), ...g.rows.map(r => [r.size, ...r.v].join(","))].join("\n") : "";
 function sgParse(t) {
@@ -79,6 +106,11 @@ const VIEWS = {
       $("#pn").onclick = e => { const b = e.target.closest("[data-days]"); if (b) { days = +b.dataset.days; sessionStorage.noctra_days = days; draw(); } };
     };
     await draw();
+  },
+  async reviews() {
+    const r = await get("reviews?select=id,rating,title,body,display_name,status,created_at,product:products(name)&order=created_at.desc&limit=200");
+    $("#pn").innerHTML = `<div class="panel"><h3>Reviews (${r.length})</h3><p class="note">Reviews come from verified buyers, a couple of weeks after their order ships. Hide any that break your standards; hidden reviews are removed from the site.</p>${r.length ? r.map(x => `<div class="rev"><div><b>${"\u2605".repeat(x.rating)}${"\u2606".repeat(5 - x.rating)}</b> ${esc(x.title)} ${x.status === "hidden" ? pill("hidden") : ""}</div><p>${esc(x.body)}</p><p class="note">${esc(x.display_name)} on ${esc(x.product?.name || "")} &middot; ${new Date(x.created_at).toLocaleDateString()} &middot; <button class="link" data-r="${x.id}" data-to="${x.status === "hidden" ? "published" : "hidden"}">${x.status === "hidden" ? "Show again" : "Hide"}</button></p></div>`).join("") : '<p class="note">No reviews yet.</p>'}</div>`;
+    $("#pn").onclick = async e => { const b = e.target.closest("[data-r]"); if (!b) return; try { await db("PATCH", `reviews?id=eq.${b.dataset.r}`, { status: b.dataset.to }); toast("Updated"); shell(); } catch { toast("Could not update"); } };
   },
   async collections() {
     const c = await get("collections?select=*&order=sort");
@@ -137,13 +169,15 @@ const VIEWS = {
     draw();
     $("#q").oninput = e => { q = e.target.value.toLowerCase(); draw(); }; $("#fs").onchange = e => { f = e.target.value; draw(); };
     $("#csv").onclick = () => csv("orders.csv", [["ref", "email", "status", "payment", "total", "currency", "date"], ...rows().map(([x]) => [x.public_ref, x.email, x.status, x.payment_status, R(x.total_minor), x.currency, x.created_at])]);
+    let cur = null;
     $("#pn").onclick = async e => {
+      const oa = e.target.closest("[data-oa]"); if (oa && cur) return orderAction(oa.dataset.oa, cur);
       const tr = e.target.closest("tr[data-i]"); if (!tr) return; const x = o[+tr.dataset.i];
       const [it, tk] = await Promise.all([get(`order_items?select=product_name,variant_title,quantity,line_total_minor&order_id=eq.${x.id}`), get(`tracking_events?select=carrier,tracking_number,tracking_url&order_id=eq.${x.id}`)]);
       const a = x.shipping_address || {};
       $("#det").innerHTML = `<div class="sum" style="margin-top:20px"><h3>${esc(x.public_ref)} ${pill(x.status)} ${pill(x.payment_status)}</h3><p class="note">${esc(x.email)}<br>${esc(a.name)}, ${esc(a.line1)} ${esc(a.line2 || "")}, ${esc(a.city)} ${esc(a.region || "")} ${esc(a.postal)}, ${esc(a.country)} ${esc(a.phone || "")}${x.order_note ? "<br>Note: " + esc(x.order_note) : ""}</p>
       ${it.map(i => `<div class="l"><span>${esc(i.product_name)} (${esc(i.variant_title)}) x ${i.quantity}</span><span>${money(i.line_total_minor, x.currency)}</span></div>`).join("")}<div class="l t"><span>Total</span><span>${money(x.total_minor, x.currency)}</span></div>
-      ${tk.map(t => `<p class="note">${esc(t.carrier || "")} ${t.tracking_url ? `<a class="link" href="${esc(t.tracking_url)}" target="_blank" rel="noopener">${esc(t.tracking_number || "track")}</a>` : esc(t.tracking_number || "")}</p>`).join("")}</div>`;
+      ${tk.map(t => `<p class="note">${esc(t.carrier || "")} ${t.tracking_url ? `<a class="link" href="${esc(t.tracking_url)}" target="_blank" rel="noopener">${esc(t.tracking_number || "track")}</a>` : esc(t.tracking_number || "")}</p>`).join("")}${orderActions(x)}</div>`; cur = x;
       $("#det").scrollIntoView({ behavior: "smooth" });
     };
   },
@@ -170,21 +204,23 @@ const VIEWS = {
       } catch { toast("Could not save"); } };
   },
   async blog() {
-    const ps = await get("posts?select=*&order=created_at.desc"); let p = {};
+    const ps = await get("posts?select=*&order=published_at.desc.nullsfirst&limit=200"), prods = await get("products?select=slug,name&status=eq.published&order=name"); let p = {};
+    const toLocal = d => d ? new Date(new Date(d).getTime() - new Date(d).getTimezoneOffset() * 6e4).toISOString().slice(0, 16) : "";
     const slug = s => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
     const draw = () => { $("#pn").innerHTML = `<div class="panel"><h3>${p.id ? "Edit post" : "New post"}</h3><form class="f" id="pf"><label class="full">Title<input name="title" required maxlength="160" value="${esc(p.title || "")}"></label>
       <label>Web address<input name="slug" required value="${esc(p.slug || "")}"></label><label>Cover image URL (optional)<input name="cover" value="${esc(p.cover_url || "")}" placeholder="https://..."></label>
       <label class="full">Short summary<input name="excerpt" maxlength="300" value="${esc(p.excerpt || "")}"></label>
       <label class="full">Post<textarea name="body" rows="18">${esc(p.body || "")}</textarea></label>
       <p class="note full">Formatting: ## Heading, **bold**, *italic*, [text](https://link), - list item, ![alt](https://image-url). Leave a blank line between paragraphs.</p>
-      <label class="note"><input type="checkbox" name="pub" ${p.published ? "checked" : ""}> Published</label>
+      <label>Publish on (blank = now)<input type="datetime-local" name="at" value="${toLocal(p.published_at)}"></label><label>Shop this verse (piece shown under the post)<select name="shop" class="inp"><option value="">None</option>${prods.map(x => `<option value="${esc(x.slug)}" ${x.slug === p.shop_slug ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></label>
+      <label class="note full"><input type="checkbox" name="pub" ${p.published ? "checked" : ""}> Published (a future date above schedules it)</label>
       <div class="full"><button class="btn sm">Save post</button> <button type="button" class="btn ghost sm" id="nw">New post</button> ${p.id ? '<button type="button" class="btn ghost sm" id="del">Delete</button>' : ""} <span id="bm" class="err"></span></div></form></div>
-      <div class="panel"><h3>All posts</h3>${ps.length ? `<table><tr><th>Title</th><th>Status</th><th></th></tr>${ps.map((x, i) => `<tr><td>${esc(x.title)}</td><td>${x.published ? pill("published") : pill("draft")}</td><td><button class="link" data-e="${i}">Edit</button> ${x.published ? `<a class="link" href="/blog/post/?s=${esc(x.slug)}" target="_blank">View</a>` : ""}</td></tr>`).join("")}</table>` : '<p class="note">No posts yet.</p>'}</div>`;
+      <div class="panel"><h3>All posts</h3>${ps.length ? `<table><tr><th>Title</th><th>Status</th><th></th></tr>${ps.map((x, i) => `<tr><td>${esc(x.title)}</td><td>${x.published ? (new Date(x.published_at) > new Date() ? pill("scheduled") + " " + new Date(x.published_at).toLocaleDateString() : pill("published")) : pill("draft")}</td><td><button class="link" data-e="${i}">Edit</button> ${x.published && new Date(x.published_at) <= new Date() ? `<a class="link" href="/blog/post/?s=${esc(x.slug)}" target="_blank" rel="noopener">View</a>` : ""}</td></tr>`).join("")}</table>` : '<p class="note">No posts yet.</p>'}</div>`;
       const f = $("#pf"); if (!p.id) f.title.oninput = () => f.slug.value = slug(f.title.value);
       $("#nw").onclick = () => { p = {}; draw(); };
       if ($("#del")) $("#del").onclick = async () => { if (confirm("Delete this post?")) { await db("DELETE", `posts?id=eq.${p.id}`); toast("Deleted"); shell(); } };
       f.onsubmit = async e => { e.preventDefault(); const v = Object.fromEntries(new FormData(f)), pub = !!v.pub;
-        const row = { title: v.title.trim(), slug: slug(v.slug), excerpt: v.excerpt.trim(), cover_url: v.cover.trim() || null, body: v.body, published: pub, published_at: pub ? (p.published_at || new Date().toISOString()) : null, updated_at: new Date().toISOString() };
+        const row = { title: v.title.trim(), slug: slug(v.slug), excerpt: v.excerpt.trim(), cover_url: v.cover.trim() || null, body: v.body, published: pub, published_at: pub ? (v.at ? new Date(v.at).toISOString() : (p.published_at || new Date().toISOString())) : null, shop_slug: v.shop || null, updated_at: new Date().toISOString() };
         try { await (p.id ? db("PATCH", `posts?id=eq.${p.id}`, row) : db("POST", "posts", row)); toast("Post saved"); shell(); } catch { $("#bm").textContent = "Could not save. Check the web address is unique and any image link starts with https://"; } };
       $("#pn").querySelectorAll("[data-e]").forEach(b => b.onclick = () => { p = ps[+b.dataset.e]; draw(); window.scrollTo({ top: 0, behavior: "smooth" }); }); };
     draw();

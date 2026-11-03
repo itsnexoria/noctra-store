@@ -3,7 +3,7 @@
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/site.css"></head><body><div id="hdr"></div><main id="main"><section class="pg"><h1 style="font-size:clamp(2.6rem,6vw,4.6rem)">The journal</h1><p class="note" style="margin-bottom:40px">Stories, drops and notes from Noctra.</p><div class="bgrid" id="b"></div></section></main><div id="ftr"></div><script type="module">
+<link rel="stylesheet" href="/assets/site.css"></head><body><div id="hdr"></div><main id="main"><section class="pg"><h1 style="font-size:clamp(2.6rem,6vw,4.6rem)">The journal</h1><p class="note" style="margin-bottom:40px">Stories, drops and notes from Noctra.</p><h2 class="vh">Latest posts</h2><div class="bgrid" id="b"></div></section></main><div id="ftr"></div><script type="module">
 import {chrome, rest, esc, star, skel, SITE, seo, $} from "/assets/app.js"; chrome();
 $("#b").innerHTML = skel(3).replace(/class="card sk"/g, 'class="bcard sk"');
 const mins = t => Math.max(1, Math.round(String(t || "").split(/\s+/).length / 200));

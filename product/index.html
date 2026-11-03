@@ -5,49 +5,87 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/site.css"></head><body><div id="hdr"></div><main id="main">
 <section class="pdp" id="pdp"><div><div class="main sk"><div class="ph" style="width:100%;height:100%"></div></div></div><div class="info"><div class="sk-line" style="width:70%;height:2em"></div><div class="sk-line" style="width:30%"></div><div class="sk-line" style="width:90%"></div><div class="sk-line" style="width:80%"></div></div></section>
+<section class="shelf" id="revs" hidden aria-labelledby="revh"><h2 id="revh">Reviews</h2><div id="revl"></div></section>
 <section class="shelf" id="rel" hidden><h2>You may also like</h2><div class="mini" id="relg"></div></section>
 <section class="shelf" id="rv" hidden><h2>Recently viewed</h2><div class="mini" id="rvg"></div></section>
 </main><div class="stick" id="stick" hidden><div><b id="sn"></b><span class="pr" id="spr"></span></div><button class="btn" id="sadd">Add to bag</button></div><div id="ftr"></div><script type="module">
-import {chrome, rest, addToCart, px, esc, fmtDesc, cleanDesc, rvGet, rvPush, card, LIST, seo, SITE, $} from "/assets/app.js"; chrome();
-const slug = new URLSearchParams(location.search).get("s");
+import {chrome, rest, addToCart, px, pxText, getCur, money, esc, fmtDesc, cleanDesc, rvGet, rvPush, card, LIST, seo, SITE, heart, stars, loadRatings, toast, $} from "/assets/app.js"; import {SB, KEY} from "/assets/config.js"; chrome(); loadRatings();
+const qp = new URLSearchParams(location.search), slug = qp.get("s"), wantV = qp.get("v");
 const root = $("#pdp");
 let p = null;
-try { [p] = await rest(`products?slug=eq.${encodeURIComponent(slug || "")}&select=*,collection:collections(slug,title),product_images(url,alt,sort),product_variants(id,title,options,price_minor,currency,active)`); } catch {}
+try { [p] = await rest(`products?slug=eq.${encodeURIComponent(slug || "")}&select=*,collection:collections(slug,title),product_images(url,alt,sort),product_variants(id,title,sku,options,price_minor,currency,active)`); } catch {}
 if (!p) { root.innerHTML = '<div><h2>Product not found</h2><a class="btn" href="/shop/">Back to shop</a></div>'; document.head.insertAdjacentHTML("beforeend", '<meta name="robots" content="noindex">'); }
 else {
   const imgs = p.product_images.sort((a, b) => a.sort - b.sort);
-  const vs = p.product_variants.filter(v => v.active);
+  const vs = p.product_variants.slice(), avail = vs.filter(v => v.active);
   vs.forEach(v => { if (!v.options || !Object.keys(v.options).length) v.options = { Option: v.title }; });
   const names = [...new Set(vs.flatMap(v => Object.keys(v.options)))];
-  const sel = {}; names.forEach(n => sel[n] = vs[0]?.options[n]);
+  const start = vs.find(v => v.id === wantV) || avail[0] || vs[0], sel = {}; names.forEach(n => sel[n] = start?.options[n]);
   const cur = () => vs.find(v => names.every(n => v.options[n] === sel[n]));
-  const prices = vs.map(v => v.price_minor), lo = Math.min(...prices), hi = Math.max(...prices);
+  const prices = (avail.length ? avail : vs).map(v => v.price_minor), lo = Math.min(...prices), hi = Math.max(...prices);
   const sg = p.size_guide && p.size_guide.rows?.length ? p.size_guide : null;
   const desc = cleanDesc(p.description);
   root.innerHTML = `<div><div class="main"><img id="big" alt="${esc(p.name)}" src="${esc(imgs[0]?.url || "")}"></div>
     <div class="thumbs">${imgs.map((i, n) => `<button class="${n ? "" : "on"}" data-u="${esc(i.url)}" aria-label="View ${n + 1}"><img src="${esc(i.url)}" alt="" loading="lazy"></button>`).join("")}</div></div>
-    <div class="info">${p.collection ? `<p class="note" style="margin:0 0 6px"><a class="link" href="/shop/?c=${esc(p.collection.slug)}">${esc(p.collection.title)}</a></p>` : ""}<h1 style="font-size:clamp(2.2rem,4vw,3.2rem)">${esc(p.name)}</h1><p class="price" id="price"></p>
-    ${names.map(n => `<div class="og"><b>${esc(n.replace(/^(Bella \+ Canvas|Gildan)\s+/i, ""))}</b><div class="opts" data-n="${esc(n)}">${[...new Set(vs.map(v => v.options[n]))].map(o => `<button class="opt${sel[n] === o ? " on" : ""}" data-v="${esc(o)}">${esc(o)}</button>`).join("")}</div></div>`).join("")}
+    <div class="info">${p.collection ? `<p class="note" style="margin:0 0 6px"><a class="link" href="/shop/?c=${esc(p.collection.slug)}">${esc(p.collection.title)}</a></p>` : ""}<div class="ttl"><h1 style="font-size:clamp(2.2rem,4vw,3.2rem)">${esc(p.name)}</h1>${heart(p)}</div><p class="rate" id="rate" hidden></p><p class="price" id="price"></p>
+    ${names.map(n => `<div class="og"><b>${esc(n.replace(/^(Bella \+ Canvas|Gildan)\s+/i, ""))}</b><div class="opts" data-n="${esc(n)}">${[...new Set(vs.map(v => v.options[n]))].map(o => `<button class="opt${sel[n] === o ? " on" : ""}${avail.some(v => v.options[n] === o) ? "" : " na"}" data-v="${esc(o)}" aria-pressed="${sel[n] === o}">${esc(o)}</button>`).join("")}</div></div>`).join("")}
     ${sg ? '<button class="link sgbtn" id="sgb">Size guide &amp; fit</button>' : ""}
     <button class="btn" id="add" style="width:100%">Add to bag</button><p class="note" id="msg" role="status"></p>
+    <form class="nf" id="nf" hidden><p class="note" style="margin:0 0 8px"><b>Currently unavailable.</b> Leave your email and we will tell you when it is back.</p><div class="inline-f"><input type="email" name="e" required placeholder="Email address" autocomplete="email" aria-label="Email address"><button class="btn ghost sm">Notify me</button></div><p class="note" id="nm" role="status"></p></form>
+    <div class="share" id="share"></div>
     ${p.production_days_min ? `<p class="note">Printed to order in ${p.production_days_min}-${p.production_days_max} business days, then shipped to you.</p>` : ""}
     <div class="desc">${fmtDesc(p.description)}</div><p class="note">Made to order. Read our <a class="link" href="/shipping/">shipping</a> and <a class="link" href="/refunds/">refund</a> policies.</p>${p.fit_notes ? `<p class="note"><b>Fit.</b> ${esc(p.fit_notes)}</p>` : ""}</div>`;
-  const upd = () => { const v = cur(); $("#price").innerHTML = v ? px(v.price_minor, v.currency) : "Not available in this combination"; $("#add").disabled = !v; $("#sadd").disabled = !v; $("#spr").innerHTML = v ? px(v.price_minor, v.currency) : ""; };
+  const upd = () => {
+    const v = cur(), ok = v?.active;
+    const alt = v && getCur() !== "ZAR" && v.currency === "ZAR" ? ` <small class="alt">${pxText(v.price_minor, v.currency)}</small>` : "";
+    $("#price").innerHTML = v ? money(v.price_minor, v.currency) + alt : "Not offered in this combination";
+    $("#add").disabled = !ok; $("#sadd").disabled = !ok; $("#spr").innerHTML = v ? money(v.price_minor, v.currency) : "";
+    $("#nf").hidden = !(v && !ok);
+  };
+  document.getElementById("cursel")?.addEventListener("change", () => upd());
   $("#sn").textContent = p.name; upd();
-  const add = () => { const v = cur(); if (!v) return; addToCart({ id: v.id, qty: 1, name: p.name, title: v.title, price: v.price_minor, cur: v.currency, img: imgs[0]?.url || "", slug: p.slug }); $("#msg").textContent = "Added to your bag."; };
+  const add = () => { const v = cur(); if (!v || !v.active) return; addToCart({ id: v.id, qty: 1, name: p.name, title: v.title, price: v.price_minor, cur: v.currency, img: imgs[0]?.url || "", slug: p.slug }); $("#msg").textContent = "Added to your bag."; };
   root.onclick = e => {
     const t = e.target.closest(".thumbs button"); if (t) { $("#big").src = t.dataset.u; root.querySelectorAll(".thumbs button").forEach(b => b.classList.toggle("on", b === t)); }
-    const o = e.target.closest(".opt"); if (o) { sel[o.parentNode.dataset.n] = o.dataset.v; o.parentNode.querySelectorAll(".opt").forEach(b => b.classList.toggle("on", b === o)); upd(); }
+    const o = e.target.closest(".opt"); if (o) { sel[o.parentNode.dataset.n] = o.dataset.v; o.parentNode.querySelectorAll(".opt").forEach(b => { b.classList.toggle("on", b === o); b.setAttribute("aria-pressed", b === o); }); upd(); }
     if (e.target.id === "add") add();
     if (e.target.id === "sgb") sizeGuide(sg);
   };
   // sticky mobile add-to-bag
   const stick = $("#stick"); stick.hidden = false; document.body.classList.add("has-stick"); $("#sadd").onclick = add;
   new IntersectionObserver(([en]) => stick.classList.toggle("show", !en.isIntersecting && en.boundingClientRect.top < 0), { threshold: 0 }).observe($("#add"));
+  // back-in-stock requests
+  $("#nf").onsubmit = async e => {
+    e.preventDefault(); const v = cur(), em = e.target.e.value.trim().toLowerCase(); if (!v || !em) return;
+    try { const r = await fetch(`${SB}/rest/v1/notify_requests?on_conflict=variant_id,email`, { method: "POST", headers: { apikey: KEY, "content-type": "application/json", Prefer: "resolution=ignore-duplicates,return=minimal" }, body: JSON.stringify({ variant_id: v.id, email: em }) });
+      $("#nm").textContent = r.ok ? "Thank you. We will email you once, when it is back." : "Could not save your request. Please try again."; if (r.ok) e.target.e.value = ""; } catch { $("#nm").textContent = "Could not save your request. Please try again."; }
+  };
+  // sharing
+  const pageUrl = `${SITE}/product/?s=${encodeURIComponent(p.slug)}`, img0 = imgs[0]?.url || "", note = `${p.name} from Noctra`;
+  $("#share").innerHTML = `<b>Share</b><a href="https://www.pinterest.com/pin/create/button/?url=${encodeURIComponent(pageUrl)}&media=${encodeURIComponent(img0)}&description=${encodeURIComponent(note)}" target="_blank" rel="noopener">Pinterest</a><a href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(pageUrl)}" target="_blank" rel="noopener">Facebook</a><a href="https://wa.me/?text=${encodeURIComponent(note + " " + pageUrl)}" target="_blank" rel="noopener">WhatsApp</a><button type="button" class="link" id="cp">Copy link</button>${navigator.share ? '<button type="button" class="link" id="ns">Share&hellip;</button>' : ""}`;
+  $("#share").onclick = async e => {
+    if (e.target.id === "cp") { try { await navigator.clipboard.writeText(pageUrl); toast("Link copied. Paste it into Instagram, a story or a message."); } catch { toast(pageUrl); } }
+    if (e.target.id === "ns") { try { await navigator.share({ title: p.name, text: note, url: pageUrl }); } catch {} }
+  };
+  // reviews
+  let revs = [], rating = null;
+  try {
+    revs = await rest(`reviews?product_id=eq.${p.id}&select=rating,title,body,display_name,created_at&order=created_at.desc&limit=30`);
+    if (revs.length) { const avg = revs.reduce((a, r) => a + r.rating, 0) / revs.length; rating = { avg: Math.round(avg * 100) / 100, count: revs.length }; }
+  } catch {}
+  if (rating) {
+    $("#rate").innerHTML = `<a href="#revs">${stars(rating.avg, rating.count)} <span>${rating.avg.toFixed(1)} (${rating.count} ${rating.count === 1 ? "review" : "reviews"})</span></a>`; $("#rate").hidden = false;
+    const dist = [5, 4, 3, 2, 1].map(n => [n, revs.filter(r => r.rating === n).length]);
+    $("#revl").innerHTML = `<div class="rsum"><div class="big">${rating.avg.toFixed(1)}</div><div>${stars(rating.avg, rating.count)}<p class="note">${rating.count} verified ${rating.count === 1 ? "review" : "reviews"}</p></div><div class="dist">${dist.map(([n, c]) => `<div><span>${n}\u2605</span><i><b style="width:${Math.round(c / rating.count * 100)}%"></b></i><span>${c}</span></div>`).join("")}</div></div>`
+      + revs.map(r => `<article class="rev"><div>${stars(r.rating)} <b>${esc(r.title)}</b></div><p>${esc(r.body)}</p><p class="note">${esc(r.display_name)} &middot; Verified purchase &middot; ${new Date(r.created_at).toLocaleDateString("en-ZA", { month: "long", year: "numeric" })}</p></article>`).join("");
+    $("#revs").hidden = false;
+  }
   // SEO
   const url = `${SITE}/product/?s=${encodeURIComponent(p.slug)}`, blurb = desc.slice(0, 155);
-  seo({ title: p.name + " | Noctra", description: blurb, image: imgs[0]?.url, url, ld: { "@context": "https://schema.org", "@type": "Product", name: p.name, description: desc.slice(0, 500), image: imgs.slice(0, 6).map(i => i.url), brand: { "@type": "Brand", name: "Noctra" }, url,
-    offers: { "@type": "AggregateOffer", priceCurrency: "ZAR", lowPrice: (lo / 100).toFixed(2), highPrice: (hi / 100).toFixed(2), offerCount: vs.length, availability: "https://schema.org/InStock", url } } });
+  const ld = { "@context": "https://schema.org", "@type": "Product", name: p.name, description: desc.slice(0, 500), image: imgs.slice(0, 6).map(i => i.url), brand: { "@type": "Brand", name: "Noctra" }, url,
+    offers: vs.slice(0, 100).map(v => ({ "@type": "Offer", sku: v.sku, name: v.title, price: (v.price_minor / 100).toFixed(2), priceCurrency: v.currency, availability: v.active ? "https://schema.org/InStock" : "https://schema.org/OutOfStock", url: `${url}&v=${v.id}` })) };
+  if (rating) { ld.aggregateRating = { "@type": "AggregateRating", ratingValue: rating.avg, reviewCount: rating.count }; ld.review = revs.slice(0, 5).map(r => ({ "@type": "Review", reviewRating: { "@type": "Rating", ratingValue: r.rating }, author: { "@type": "Person", name: r.display_name }, name: r.title, reviewBody: r.body })); }
+  seo({ title: p.name + " | Noctra", description: blurb, image: imgs[0]?.url, url, ld });
   // related + recently viewed
   const prev = rvGet().filter(x => x !== p.slug); rvPush(p.slug);
   try {

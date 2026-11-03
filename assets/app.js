@@ -1,4 +1,4 @@
-import { SB, KEY, CONTACT_EMAIL, BUSINESS_NAME, BUSINESS_ADDRESS, SITE } from "/assets/config.js";
+import { SB, KEY, CONTACT_EMAIL, BUSINESS_NAME, BUSINESS_ADDRESS, SITE, ANALYTICS_TOKEN } from "/assets/config.js";
 export { SITE };
 export const $ = (s, r = document) => r.querySelector(s);
 export const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -24,7 +24,7 @@ const CK = "noctra_cart";
 export const getCart = () => { try { return JSON.parse(localStorage[CK] || "[]"); } catch { return []; } };
 export const setCart = c => { try { localStorage[CK] = JSON.stringify(c); } catch {} badge(); if (document.body.classList.contains("bag-open")) renderBag(); };
 export function addToCart(it) { const c = getCart(), f = c.find(x => x.id === it.id); f ? f.qty = Math.min(10, f.qty + it.qty) : c.push(it); setCart(c); if (!/^\/(cart|checkout)\//.test(location.pathname)) openBag(); }
-function badge() { const n = getCart().reduce((a, b) => a + b.qty, 0); document.querySelectorAll(".cc").forEach(e => { e.textContent = n; e.hidden = !n; }); }
+function badge() { const n = getCart().reduce((a, b) => a + b.qty, 0); document.querySelectorAll(".cc").forEach(e => { e.textContent = n; e.hidden = !n; }); document.querySelectorAll("a.bag").forEach(a => a.setAttribute("aria-label", n ? `Bag, ${n} ${n === 1 ? "item" : "items"}` : "Bag")); }
 
 // ---------- display currency (we always charge in ZAR) ----------
 const CURS = ["ZAR", "USD", "GBP"], LOC = { ZAR: "en-ZA", USD: "en-US", GBP: "en-GB" };
@@ -91,7 +91,7 @@ export function fmtDesc(t) {
   let html = `<p>${esc(parts[0])}</p>`;
   for (let i = 1; i < parts.length; i += 2) {
     const items = parts[i + 1].split(/\s+-\s+/).map(x => x.trim()).filter(Boolean);
-    html += `<h4>${esc(parts[i])}</h4><ul>${items.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
+    html += `<h2 class="dh">${esc(parts[i])}</h2><ul>${items.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
   }
   return html;
 }
@@ -99,15 +99,15 @@ export function fmtDesc(t) {
 export const wordmark = '<img class="wm-img" src="/assets/logo-gold.png" alt="Noctra" width="700" height="196">';
 export function chrome() {
   $("#hdr").innerHTML = `<a class="skip" href="#main">Skip to content</a><header class="top"><a href="/" aria-label="Noctra home">${wordmark}</a>
-  <nav><a href="/shop/">Shop</a><a href="/blog/" class="nx">Journal</a><a href="/about/" class="nx">About</a><a href="/account/" class="acct">Account</a>
+  <nav aria-label="Main"><a href="/shop/">Shop</a><a href="/blog/" class="nx">Journal</a><a href="/about/" class="nx">About</a><a href="/wishlist/" class="wl" aria-label="Saved pieces"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 2.7 5 6 5c2.1 0 3.6 1.2 4.4 2.5h.1C11.4 6.2 12.9 5 15 5c3.3 0 5.1 3.4 3.6 6.8C16.5 16.4 12 21 12 21z"/></svg></a><a href="/account/" class="acct">Account</a>
   <select class="cursel" id="cursel" aria-label="Display currency">${CURS.map(c => `<option${c === getCur() ? " selected" : ""}>${c}</option>`).join("")}</select>
-  <a href="/cart/" class="bag" aria-label="Open bag">Bag <b class="cc" hidden>0</b></a></nav></header>`;
+  <a href="/cart/" class="bag" aria-label="Bag">Bag <b class="cc" hidden>0</b></a></nav></header>`;
   $("#ftr").innerHTML = `<footer class="foot"><div>${wordmark}<p>Christian apparel, made to order and shipped worldwide.</p></div>
   <div><b>Explore</b><a href="/shop/">Shop</a><a href="/blog/">Journal</a><a href="/about/">About</a><a href="/contact/">Contact</a></div>
-  <div><b>Help</b><a href="/track/">Track your order</a><a href="/account/">My account</a><a href="/shipping/">Shipping</a><a href="/refunds/">Refunds &amp; returns</a><a href="/terms/">Terms of service</a><a href="/privacy/">Privacy policy</a></div>
+  <div><b>Help</b><a href="/track/">Track your order</a><a href="/account/">My account</a><a href="/wishlist/">Saved pieces</a><a href="/shipping/">Shipping</a><a href="/refunds/">Refunds &amp; returns</a><a href="/terms/">Terms of service</a><a href="/privacy/">Privacy policy</a></div>
   <div><b>Stay in the loop</b>${waitlistForm("footer")}</div>
-  <p class="fine">&copy; ${new Date().getFullYear()} ${esc(BUSINESS_NAME)}. All rights reserved.</p></footer>
-  <div class="bag-ov" id="bagov" hidden></div><aside class="bagd" id="bagd" aria-hidden="true" aria-label="Your bag" tabindex="-1"></aside>`;
+  <p class="fine">${ANALYTICS_TOKEN ? '<button class="link" id="cookieset">Cookie settings</button> &middot; ' : ""}&copy; ${new Date().getFullYear()} ${esc(BUSINESS_NAME)}. All rights reserved.</p></footer>
+  <div class="bag-ov" id="bagov" hidden></div><aside class="bagd" id="bagd" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Your bag" tabindex="-1"></aside><div class="toast" id="toast" role="status" aria-live="polite"></div>`;
   document.querySelectorAll("[data-email]").forEach(e => e.innerHTML = CONTACT_EMAIL ? `<a class="link" href="mailto:${esc(CONTACT_EMAIL)}">${esc(CONTACT_EMAIL)}</a>` : "our support email");
   document.querySelectorAll("[data-biz]").forEach(e => e.textContent = BUSINESS_NAME + (BUSINESS_ADDRESS ? ", " + BUSINESS_ADDRESS : ""));
   $("#cursel").onchange = e => { localStorage.noctra_cur = e.target.value; refreshPx(); if (document.body.classList.contains("bag-open")) renderBag(); };
@@ -115,7 +115,9 @@ export function chrome() {
   $("#bagov").onclick = closeBag;
   $("#bagd").onclick = bagClick;
   addEventListener("keydown", e => { if (e.key === "Escape") closeBag(); });
-  badge(); cursor(); loadFx();
+  const cs = $("#cookieset"); if (cs) cs.onclick = () => { try { localStorage.removeItem("noctra_consent"); } catch {} openConsent(); };
+  badge(); cursor(); loadFx(); wlSync(); consentInit();
+  let ht; new MutationObserver(() => { clearTimeout(ht); ht = setTimeout(() => updateHearts(), 60); }).observe(document.body, { childList: true, subtree: true });
 }
 
 // ---------- slide-out bag ----------
@@ -139,21 +141,77 @@ function bagClick(e) {
 }
 export function openBag() {
   renderBag(); lastFocus = document.activeElement;
-  document.body.classList.add("bag-open"); $("#bagov").hidden = false; const d = $("#bagd"); d.setAttribute("aria-hidden", "false"); (d.querySelector(".bd-x") || d).focus();
+  document.body.classList.add("bag-open"); setInert(true); $("#bagov").hidden = false; const d = $("#bagd"); d.setAttribute("aria-hidden", "false"); (d.querySelector(".bd-x") || d).focus();
 }
+const setInert = on => document.querySelectorAll("#hdr, main, .foot").forEach(e => { e.inert = on; });
 export function closeBag() {
   if (!document.body.classList.contains("bag-open")) return;
-  document.body.classList.remove("bag-open"); $("#bagov").hidden = true; $("#bagd").setAttribute("aria-hidden", "true"); lastFocus?.focus?.();
+  document.body.classList.remove("bag-open"); setInert(false); $("#bagov").hidden = true; $("#bagd").setAttribute("aria-hidden", "true"); lastFocus?.focus?.();
 }
 
+export const stars = (avg, n) => `<span class="stars" style="--v:${Math.max(0, Math.min(5, +avg || 0))}" role="img" aria-label="Rated ${(+avg || 0).toFixed(1)} out of 5${n ? " from " + n + (n === 1 ? " review" : " reviews") : ""}">\u2605\u2605\u2605\u2605\u2605</span>`;
+const RATINGS = {};
+export async function loadRatings() { try { (await rest("product_ratings?select=product_id,avg,count")).forEach(x => RATINGS[x.product_id] = x); } catch {} }
+const heartSvg = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 2.7 5 6 5c2.1 0 3.6 1.2 4.4 2.5h.1C11.4 6.2 12.9 5 15 5c3.3 0 5.1 3.4 3.6 6.8C16.5 16.4 12 21 12 21z"/></svg>';
+export const heart = (p, label) => `<button type="button" class="heart" data-wl="${esc(p.slug)}" data-id="${esc(p.id || "")}" data-name="${esc(p.name)}" aria-pressed="false" aria-label="Save ${esc(p.name)}">${heartSvg}</button>`;
 export const card = (p, i = 0) => {
   const im = [...(p.product_images || [])].sort((a, b) => a.sort - b.sort)[0];
   const pr = (p.product_variants || []).filter(v => v.active).map(v => v.price_minor);
-  const from = pr.length ? Math.min(...pr) : 0;
-  return `<a class="card" style="--i:${Math.min(i, 12)}" href="/product/?s=${encodeURIComponent(p.slug)}"><div class="ph">${im ? `<img src="${esc(im.url)}" alt="${esc(p.name)}" loading="lazy">` : ""}</div>
-  <h3>${esc(p.name)}</h3><p class="pr">${pr.length > 1 ? "From " : ""}${px(from, p.currency)}</p></a>`;
+  const from = pr.length ? Math.min(...pr) : 0, r = RATINGS[p.id];
+  return `<div class="card" style="--i:${Math.min(i, 12)}"><a class="cl" href="/product/?s=${encodeURIComponent(p.slug)}"><div class="ph">${im ? `<img src="${esc(im.url)}" alt="${esc(p.name)}" loading="lazy">` : ""}</div>
+  <h3>${esc(p.name)}</h3>${r?.count ? `<p class="rate">${stars(r.avg, r.count)} <span>(${r.count})</span></p>` : ""}<p class="pr">${pr.length > 1 ? "From " : ""}${px(from, p.currency)}</p></a>${heart(p)}</div>`;
 };
-export const LIST = "products?select=slug,name,tags,currency,created_at,collection:collections(slug,title),product_images(url,sort),product_variants(price_minor,active,options)&order=created_at.desc";
+export const LIST = "products?select=id,slug,name,tags,currency,created_at,collection:collections(slug,title),product_images(url,sort),product_variants(price_minor,active,options)&order=created_at.desc";
+
+// ---------- wishlist (this device, synced to the account when signed in) ----------
+const WK = "noctra_wl";
+export const wlGet = () => { try { return JSON.parse(localStorage[WK] || "[]"); } catch { return []; } };
+const wlSet = l => { try { localStorage[WK] = JSON.stringify(l); } catch {} };
+const subOf = t => { try { return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).sub; } catch { return ""; } };
+export function updateHearts(root = document) {
+  const l = new Set(wlGet().map(x => x.s));
+  root.querySelectorAll(".heart").forEach(b => { const on = l.has(b.dataset.wl); b.setAttribute("aria-pressed", on); b.setAttribute("aria-label", (on ? "Remove " : "Save ") + b.dataset.name + (on ? " from saved pieces" : " to saved pieces")); });
+}
+async function wlToggle(slug, id) {
+  let l = wlGet(); const on = l.some(x => x.s === slug);
+  l = on ? l.filter(x => x.s !== slug) : [...l, { s: slug, id }]; wlSet(l);
+  const ses = await session();
+  if (ses && id) {
+    const h = { apikey: KEY, Authorization: "Bearer " + ses.access_token, "content-type": "application/json" };
+    try { on ? await fetch(`${SB}/rest/v1/wishlist?product_id=eq.${id}`, { method: "DELETE", headers: h }) : await fetch(`${SB}/rest/v1/wishlist`, { method: "POST", headers: { ...h, Prefer: "resolution=ignore-duplicates,return=minimal" }, body: JSON.stringify({ user_id: subOf(ses.access_token), product_id: id }) }); } catch {}
+  }
+  return { on: !on, signedIn: !!ses };
+}
+async function wlSync() {
+  const ses = await session(); if (!ses) return;
+  try {
+    const h = { apikey: KEY, Authorization: "Bearer " + ses.access_token, "content-type": "application/json" };
+    const srv = await rest("wishlist?select=product_id,product:products(slug)", ses.access_token);
+    const local = wlGet(), have = new Set(srv.map(x => x.product_id));
+    const add = local.filter(x => x.id && !have.has(x.id));
+    if (add.length) await fetch(`${SB}/rest/v1/wishlist`, { method: "POST", headers: { ...h, Prefer: "resolution=ignore-duplicates,return=minimal" }, body: JSON.stringify(add.map(x => ({ user_id: subOf(ses.access_token), product_id: x.id }))) });
+    const merged = [...local]; srv.forEach(x => { if (x.product?.slug && !merged.some(m => m.s === x.product.slug)) merged.push({ s: x.product.slug, id: x.product_id }); });
+    wlSet(merged); updateHearts();
+  } catch {}
+}
+export function toast(msg) { const t = $("#toast"); if (!t) return; t.textContent = msg; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), 3600); }
+document.addEventListener("click", async e => {
+  const b = e.target.closest(".heart"); if (!b) return; e.preventDefault(); e.stopPropagation();
+  const r = await wlToggle(b.dataset.wl, b.dataset.id); updateHearts();
+  toast(r.on ? (r.signedIn ? "Saved to your account." : "Saved on this device. Sign in to keep it on every device.") : "Removed from saved pieces.");
+});
+
+// ---------- optional analytics, loaded only after consent ----------
+const loadAnalytics = () => { if (!ANALYTICS_TOKEN || document.querySelector("script[data-cf-beacon]")) return; const s = document.createElement("script"); s.defer = true; s.src = "https://static.cloudflareinsights.com/beacon.min.js"; s.dataset.cfBeacon = JSON.stringify({ token: ANALYTICS_TOKEN }); document.head.append(s); };
+export function openConsent() {
+  if (!ANALYTICS_TOKEN || $("#consent")) return;
+  const d = document.createElement("div"); d.id = "consent"; d.className = "consent"; d.setAttribute("role", "region"); d.setAttribute("aria-label", "Analytics preference");
+  d.innerHTML = '<p>We use privacy-friendly analytics to see which pages help visitors. No ads, no tracking across sites. <a class="link" href="/privacy/">Privacy policy</a></p><div><button class="btn sm" data-c="yes">Allow analytics</button> <button class="btn ghost sm" data-c="no">No thanks</button></div>';
+  d.onclick = e => { const b = e.target.closest("[data-c]"); if (!b) return; try { localStorage.noctra_consent = b.dataset.c; } catch {} if (b.dataset.c === "yes") loadAnalytics(); d.remove(); };
+  document.body.append(d);
+}
+function consentInit() { if (!ANALYTICS_TOKEN) return; const c = localStorage.noctra_consent; c === "yes" ? loadAnalytics() : c ? 0 : openConsent(); }
+
 export function emptyShelf() {
   return `<div class="empty"><div class="bigstar">${STAR}</div><h3>The first drop is on its way.</h3><p>Leave your email and we'll tell you the moment it lands.</p>${waitlistForm("shelf")}</div>`;
 }
@@ -174,7 +232,7 @@ export function md(src) {
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/[^\s)]*)\)/g, '<a href="$2" rel="noopener">$1</a>')
     .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\*([^*]+)\*/g, "<i>$1</i>");
   return String(src || "").split(/\n{2,}/).map(b => { b = b.trim(); if (!b) return ""; let m;
-    if ((m = b.match(/^(#{1,3})\s+(.*)$/))) return `<h${m[1].length + 1}>${inl(m[2])}</h${m[1].length + 1}>`;
+    if ((m = b.match(/^(#{1,3})\s+(.*)$/))) { const lv = Math.max(2, m[1].length); return `<h${lv}>${inl(m[2])}</h${lv}>`; }
     if (/^>/.test(b)) { const ps = b.split("\n").map(l => l.replace(/^>\s?/, "")).join("\n").split(/\n\s*\n/).map(x => x.trim()).filter(Boolean); const cite = ps.length > 1 ? ps.pop() : ""; return `<blockquote>${ps.map(x => `<p>${inl(x)}</p>`).join("")}${cite ? `<cite>${inl(cite)}</cite>` : ""}</blockquote>`; }
     if (/^[-*]\s/.test(b)) return "<ul>" + b.split("\n").map(l => `<li>${inl(l.replace(/^[-*]\s+/, ""))}</li>`).join("") + "</ul>";
     return `<p>${inl(b).replace(/\n/g, "<br>")}</p>`; }).join("");

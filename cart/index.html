@@ -4,7 +4,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/site.css"></head><body><div id="hdr"></div><main id="main">
-<section class="pg"><h2>Your bag</h2><div id="cart"></div></section></main><div id="ftr"></div><script type="module">
+<section class="pg"><h1 class="pgt">Your bag</h1><div id="cart"></div></section></main><div id="ftr"></div><script type="module">
 import {chrome, getCart, setCart, px, chargeNote, refreshPx, api, acct, esc, COUNTRIES, countryName, guessCountry, shippingCountries, $} from "/assets/app.js"; chrome();
 const MSG = { country_not_supported: "We don't ship to that country yet.", invalid_code: "That discount code isn't valid.", item_unavailable: "An item in your bag is no longer available. Please remove it.", rate_limited: "Too many requests. Please wait a moment." };
 let cc = guessCountry(), code = localStorage.noctra_code || "", countries = [], q = null, qerr = "";

@@ -7,5 +7,5 @@
 <section class="pg"><div class="prose" id="u"></div></section></main><div id="ftr"></div><script type="module">
 import {chrome, $} from "/assets/app.js"; chrome();
 const bad = new URLSearchParams(location.search).has("error");
-$("#u").innerHTML = bad ? "<h2>That link didn't work</h2><p>The unsubscribe link looks incomplete. Please contact us and we'll remove you right away.</p>" : "<h2>You're unsubscribed</h2><p>We won't send you any more bag reminders. Order confirmations and shipping updates for purchases you make will still reach you.</p>";
+$("#u").innerHTML = bad ? "<h1>That link didn't work</h1><p>The unsubscribe link looks incomplete. Please contact us and we'll remove you right away.</p>" : "<h1>You're unsubscribed</h1><p>We won't send you any more bag reminders. Order confirmations and shipping updates for purchases you make will still reach you.</p>";
 </script></body></html>

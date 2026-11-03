@@ -1,5 +1,6 @@
 // Serves the static site and adds server-side SEO for dynamic pages:
 //   /sitemap.xml         generated from Supabase
+//   /feeds/products.xml  product feed for Google Merchant Center, Pinterest and Meta catalogs
 //   /product/?s=slug     per-product title, description, Open Graph tags, JSON-LD
 //   /blog/post/?s=slug   per-post title, description, Open Graph tags, JSON-LD
 const SB = "https://omzcuetbhurjwnzdufme.supabase.co";
@@ -17,6 +18,7 @@ export default {
     if (request.method === "GET" || request.method === "HEAD") {
       try {
         if (path === "/sitemap.xml") return await sitemap(url.origin);
+        if (path === "/feeds/products.xml") return await feed(url.origin);
         if (path === "/product") return await inject(request, env, url, productTags);
         if (path === "/blog/post") return await inject(request, env, url, postTags);
       } catch { /* fall through to the plain page */ }
@@ -52,15 +54,25 @@ async function inject(request, env, url, build) {
 const ldTag = (ld) => `<script type="application/ld+json" data-ld="1">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>`;
 
 async function productTags(slug, origin) {
-  const [p] = await get(`products?slug=eq.${slug}&status=eq.published&select=name,description,product_images(url,sort),product_variants(price_minor,active)&limit=1`);
+  const [p] = await get(`products?slug=eq.${slug}&status=eq.published&select=id,name,description,product_images(url,sort),product_variants(id,sku,title,price_minor,currency,active)&limit=1`);
   if (!p) return null;
+  const [ratings, reviews] = await Promise.all([
+    get(`product_ratings?product_id=eq.${p.id}&select=avg,count`),
+    get(`reviews?product_id=eq.${p.id}&status=eq.published&select=rating,title,body,display_name&order=created_at.desc&limit=5`),
+  ]);
   const imgs = [...(p.product_images || [])].sort((a, b) => a.sort - b.sort).map((i) => i.url).filter((u) => /^https:\/\//.test(u));
-  const prices = (p.product_variants || []).filter((v) => v.active).map((v) => v.price_minor);
+  const vs = p.product_variants || [], prices = vs.filter((v) => v.active).map((v) => v.price_minor);
   const desc = clean(p.description).slice(0, 155) || "Christian apparel from Noctra, made to order.";
   const canon = `${origin}/product/?s=${slug}`, title = `${p.name} | Noctra`;
   const ld = { "@context": "https://schema.org", "@type": "Product", name: p.name, description: clean(p.description).slice(0, 500), image: imgs.slice(0, 6), brand: { "@type": "Brand", name: "Noctra" }, url: canon,
-    ...(prices.length ? { offers: { "@type": "AggregateOffer", priceCurrency: "ZAR", lowPrice: (Math.min(...prices) / 100).toFixed(2), highPrice: (Math.max(...prices) / 100).toFixed(2), offerCount: prices.length, availability: "https://schema.org/InStock", url: canon } } : {}) };
-  const tags = `<link rel="canonical" href="${e(canon)}"><meta property="og:type" content="product"><meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(desc)}"><meta property="og:url" content="${e(canon)}">${imgs[0] ? `<meta property="og:image" content="${e(imgs[0])}">` : ""}<meta name="twitter:card" content="summary_large_image">${ldTag(ld)}`;
+    offers: vs.slice(0, 100).map((v) => ({ "@type": "Offer", sku: v.sku, name: v.title, price: (v.price_minor / 100).toFixed(2), priceCurrency: v.currency, availability: v.active ? "https://schema.org/InStock" : "https://schema.org/OutOfStock", url: `${canon}&v=${v.id}` })) };
+  const r = ratings[0];
+  if (r && r.count > 0) {
+    ld.aggregateRating = { "@type": "AggregateRating", ratingValue: r.avg, reviewCount: r.count };
+    ld.review = reviews.map((x) => ({ "@type": "Review", reviewRating: { "@type": "Rating", ratingValue: x.rating }, author: { "@type": "Person", name: x.display_name }, name: x.title, reviewBody: x.body }));
+  }
+  const price = prices.length ? `<meta property="product:price:amount" content="${(Math.min(...prices) / 100).toFixed(2)}"><meta property="product:price:currency" content="ZAR"><meta property="og:availability" content="instock">` : "";
+  const tags = `<link rel="canonical" href="${e(canon)}"><meta property="og:type" content="product"><meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(desc)}"><meta property="og:url" content="${e(canon)}">${imgs[0] ? `<meta property="og:image" content="${e(imgs[0])}">` : ""}${price}<meta name="twitter:card" content="summary_large_image">${ldTag(ld)}`;
   return { title, desc, tags };
 }
 
@@ -71,4 +83,26 @@ async function postTags(slug, origin) {
   const ld = { "@context": "https://schema.org", "@type": "Article", headline: p.title, description: p.excerpt, image: [img], datePublished: p.published_at, dateModified: p.updated_at, author: { "@type": "Organization", name: "Noctra" }, publisher: { "@type": "Organization", name: "Noctra" }, mainEntityOfPage: canon };
   const tags = `<link rel="canonical" href="${e(canon)}"><meta property="og:type" content="article"><meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(p.excerpt)}"><meta property="og:url" content="${e(canon)}"><meta property="og:image" content="${e(img)}"><meta name="twitter:card" content="summary_large_image">${ldTag(ld)}`;
   return { title, desc: p.excerpt, tags };
+}
+
+// Product feed in the Google Merchant Center RSS format (also accepted by Pinterest and Meta catalogs).
+const xe = (x) => String(x ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[c]));
+async function feed(origin) {
+  const [products, ship] = await Promise.all([
+    get("products?select=id,slug,name,description,collection:collections(title),product_images(url,sort),product_variants(id,sku,title,options,price_minor,currency,active)&status=eq.published&limit=200"),
+    get("site_settings?key=eq.shipping&select=value"),
+  ]);
+  const countries = ship[0]?.value?.countries || {};
+  const items = [];
+  for (const p of products) {
+    const imgs = [...(p.product_images || [])].sort((a, b) => a.sort - b.sort).map((i) => i.url).filter((u) => /^https:\/\//.test(u));
+    if (!imgs.length) continue;
+    const desc = clean(p.description).slice(0, 4900) || p.name;
+    const tee = !/hood|sweat/i.test(p.name);
+    for (const v of p.product_variants || []) {
+      const o = v.options || {}, colour = Object.entries(o).find(([k]) => /colou?r/i.test(k))?.[1], size = Object.entries(o).find(([k]) => /size/i.test(k))?.[1];
+      items.push(`<item><g:id>${xe(v.sku || v.id)}</g:id><g:item_group_id>${xe(p.slug)}</g:item_group_id><title>${xe(p.name)}</title><description>${xe(desc)}</description><link>${xe(`${origin}/product/?s=${p.slug}&v=${v.id}`)}</link><g:image_link>${xe(imgs[0])}</g:image_link>${imgs.slice(1, 10).map((u) => `<g:additional_image_link>${xe(u)}</g:additional_image_link>`).join("")}<g:availability>${v.active ? "in_stock" : "out_of_stock"}</g:availability><g:price>${(v.price_minor / 100).toFixed(2)} ${xe(v.currency)}</g:price><g:brand>Noctra</g:brand><g:condition>new</g:condition><g:identifier_exists>no</g:identifier_exists><g:google_product_category>${tee ? "Apparel &amp; Accessories &gt; Clothing &gt; Shirts &amp; Tops" : "Apparel &amp; Accessories &gt; Clothing"}</g:google_product_category>${p.collection?.title ? `<g:product_type>${xe(p.collection.title)}</g:product_type>` : ""}<g:gender>unisex</g:gender><g:age_group>adult</g:age_group>${colour ? `<g:color>${xe(colour)}</g:color>` : ""}${size ? `<g:size>${xe(size)}</g:size>` : ""}${Object.entries(countries).map(([c, m]) => `<g:shipping><g:country>${xe(c)}</g:country><g:service>Standard</g:service><g:price>${(m / 100).toFixed(2)} ZAR</g:price></g:shipping>`).join("")}</item>`);
+    }
+  }
+  return new Response(`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:g="http://base.google.com/ns/1.0"><channel><title>Noctra</title><link>${xe(origin)}</link><description>Christian apparel, made to order.</description>\n${items.join("\n")}\n</channel></rss>`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
 }

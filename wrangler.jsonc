@@ -7,6 +7,6 @@
     "directory": ".",
     "binding": "ASSETS",
     "not_found_handling": "404-page",
-    "run_worker_first": ["/sitemap.xml", "/product", "/product/", "/blog/post", "/blog/post/"]
+    "run_worker_first": ["/sitemap.xml", "/feeds/products.xml", "/product", "/product/", "/blog/post", "/blog/post/"]
   }
 }

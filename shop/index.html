@@ -4,12 +4,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/site.css"></head><body><div id="hdr"></div><main id="main">
-<section class="sec"><div class="hd"><h2 id="ttl">Shop</h2></div><p class="note" id="cdesc"></p>
+<section class="sec"><div class="hd"><h1 id="ttl" class="pgt">Shop</h1></div><p class="note" id="cdesc"></p>
 <div class="chips" id="chips"></div>
 <div class="tools"><input class="inp" id="q" type="search" placeholder="Search the collection" aria-label="Search"><select class="inp" id="sort" aria-label="Sort"><option value="new">Newest</option><option value="lo">Price: low to high</option><option value="hi">Price: high to low</option><option value="az">Name: A to Z</option></select></div>
 <div class="fgrp" id="fg" hidden><label>Up to <b id="pv"></b><br><input type="range" id="pr" aria-label="Maximum price"></label><div class="chips" id="cols" style="margin:0"></div></div>
-<p class="count" id="cnt" role="status"></p><div class="grid" id="grid"></div></section></main><div id="ftr"></div><script type="module">
-import {chrome, rest, card, LIST, emptyShelf, esc, px, skel, seo, SITE, $} from "/assets/app.js"; chrome();
+<p class="count" id="cnt" role="status"></p><h2 class="vh">Products</h2><div class="grid" id="grid"></div></section></main><div id="ftr"></div><script type="module">
+import {chrome, rest, card, LIST, emptyShelf, esc, px, skel, seo, SITE, loadRatings, $} from "/assets/app.js"; chrome();
 const qs = new URLSearchParams(location.search);
 const st = { c: qs.get("c") || "", col: qs.get("col") || "", q: qs.get("q") || "", sort: qs.get("sort") || "new", max: +qs.get("max") || 0 };
 let all = [], cols = [];
@@ -28,7 +28,7 @@ function draw() {
   sync();
 }
 try {
-  all = await rest(LIST + "&limit=200");
+  await loadRatings(); all = await rest(LIST + "&limit=200");
   const have = new Set(all.map(p => p.collection?.slug).filter(Boolean));
   cols = (await rest("collections?select=slug,title,description&published=eq.true&order=sort")).filter(c => have.has(c.slug));
   if (cols.length) { $("#chips").innerHTML = [{ slug: "", title: "All" }, ...cols].map(c => `<button class="chip${c.slug === st.c ? " on" : ""}" data-c="${esc(c.slug)}">${esc(c.title)}</button>`).join(""); }

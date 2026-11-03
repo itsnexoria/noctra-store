@@ -4,9 +4,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/site.css"><meta name="robots" content="noindex"></head><body><div id="hdr"></div><main id="main">
-<section class="pg"><h2>Checkout</h2><div class="two" style="padding-top:10px"><form class="f" id="form" autocomplete="on">
-<h3>Contact</h3><label class="full">Email<input name="email" type="email" required autocomplete="email"></label>
-<h3>Delivery</h3><label class="full">Full name<input name="name" required autocomplete="name"></label>
+<section class="pg"><h1 class="pgt">Checkout</h1><div class="two" style="padding-top:10px"><form class="f" id="form" autocomplete="on">
+<h2 class="h3">Contact</h2><label class="full">Email<input name="email" type="email" required autocomplete="email"></label>
+<h2 class="h3">Delivery</h2><label class="full">Full name<input name="name" required autocomplete="name"></label>
 <label class="full">Address<input name="line1" required autocomplete="address-line1"></label>
 <label class="full">Apartment, suite (optional)<input name="line2" autocomplete="address-line2"></label>
 <label>City<input name="city" required autocomplete="address-level2"></label><label>State / province<input name="region" autocomplete="address-level1"></label>
@@ -33,7 +33,7 @@ try {
 session().then(async s => { if (!s) return; try { const u = await (await fetch(SB + "/auth/v1/user", { headers: { apikey: KEY, Authorization: "Bearer " + s.access_token } })).json(); if (u.email && !$("#form").email.value) $("#form").email.value = u.email; } catch {} });
 const MSG = { country_not_supported: "We don't ship to that country yet.", item_unavailable: "An item in your bag is no longer available. Remove it from your bag and try again.", item_not_orderable: "An item in your bag can't be ordered right now. Please contact us.", invalid_code: "That discount code isn't valid.", payment_unavailable: "Payment is unavailable right now. Please try again in a moment.", rate_limited: "Too many attempts. Please wait a few minutes.", invalid_email: "Please enter a valid email address.", invalid_address: "Please check your delivery details.", shipping_not_configured: "Shipping isn't set up yet. Please check back soon.", not_configured: "Checkout isn't switched on yet. Please check back soon." };
 const say = e => $("#err").textContent = MSG[e.code] || "Something went wrong. Please try again.";
-const draw = q => { $("#sum").innerHTML = `<h3>Order summary</h3>${cart.map(i => `<div class="l"><span>${esc(i.name)} (${esc(i.title)}) x ${i.qty}</span><span>${px(i.price * i.qty, i.cur)}</span></div>`).join("")}
+const draw = q => { $("#sum").innerHTML = `<h2 class="h3">Order summary</h2>${cart.map(i => `<div class="l"><span>${esc(i.name)} (${esc(i.title)}) x ${i.qty}</span><span>${px(i.price * i.qty, i.cur)}</span></div>`).join("")}
   ${q ? `<div class="l"><span>Shipping</span><span>${money(q.shippingMinor, q.currency)}</span></div>${q.discountMinor ? `<div class="l"><span>Discount</span><span>-${money(q.discountMinor, q.currency)}</span></div>` : ""}<div class="l t"><span>Total</span><span>${money(q.totalMinor, q.currency)}</span></div>${chargeNote}` : '<p class="note">Choose a country to see shipping and your total.</p>'}`; refreshPx(); };
 draw();
 async function quote() {

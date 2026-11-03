@@ -1,0 +1,29 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Write a review | Noctra</title><meta name="description" content="Tell us what you think of your Noctra order."><meta name="theme-color" content="#0f0819">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css"><meta name="robots" content="noindex"><meta name="robots" content="noindex"></head><body><div id="hdr"></div><main id="main">
+<section class="pg"><div id="r" class="prose" style="max-width:720px"><div class="sk-line" style="width:50%;height:2em"></div><div class="sk-line"></div></div></section></main><div id="ftr"></div><script type="module">
+import {chrome, fn, esc, $} from "/assets/app.js"; chrome();
+const qp = new URLSearchParams(location.search), ref = qp.get("r") || "", token = qp.get("t") || "";
+const R = $("#r");
+const form = (it, first) => `<form class="card-box rf" data-slug="${esc(it.slug)}"><div class="ord">${it.img ? `<img src="${esc(it.img)}" alt="" width="64" height="80" style="border-radius:10px;object-fit:cover">` : ""}<h2 style="margin:0;font-size:1.6rem">${esc(it.name)}</h2></div>
+  <fieldset class="rfs"><legend>Your rating</legend><div class="rating">${[5, 4, 3, 2, 1].map(n => `<input type="radio" name="rating-${esc(it.slug)}" id="s${n}-${esc(it.slug)}" value="${n}" required><label for="s${n}-${esc(it.slug)}"><span class="vh">${n} ${n === 1 ? "star" : "stars"}</span>\u2605</label>`).join("")}</div></fieldset>
+  <label class="fl">Headline<input name="title" maxlength="100" placeholder="Sum it up in a few words"></label>
+  <label class="fl">Your review<textarea name="body" rows="5" maxlength="2000" placeholder="How does it fit and feel? Would you recommend it?"></textarea></label>
+  <label class="fl">Name shown with your review<input name="name" required maxlength="60" autocomplete="given-name" value="${esc(first)}"></label>
+  <p class="err" role="alert"></p><button class="btn">Submit review</button></form>`;
+async function load() {
+  let d; try { d = await fn("customer-api", { action: "review_order", ref, token }); } catch { R.innerHTML = '<h1>This link has expired</h1><p>We could not open your review page. Please use the link in your email, or <a class="link" href="/contact/">contact us</a>.</p>'; return; }
+  const todo = d.items.filter(i => !i.reviewed);
+  R.innerHTML = `<h1 style="font-size:clamp(2.2rem,5vw,3.4rem)">How did we do?</h1><p class="note">Thank you for your order${d.firstName ? ", " + esc(d.firstName) : ""}. Honest reviews help other people choose well.</p>${todo.length ? todo.map(i => form(i, d.firstName || "")).join("") : '<div class="card-box"><p class="ok">Thank you, you have already reviewed everything in this order.</p><a class="btn" href="/shop/">Back to the shop</a></div>'}`;
+}
+R.addEventListener("submit", async e => {
+  e.preventDefault(); const f = e.target, err = f.querySelector(".err"), b = f.querySelector("button"); err.textContent = ""; b.disabled = true;
+  try { await fn("customer-api", { action: "submit_review", ref, token, slug: f.dataset.slug, rating: +f.querySelector("input[type=radio]:checked").value, title: f.title.value, body: f.body.value, name: f.name.value });
+    f.innerHTML = '<p class="ok" role="status">Thank you. Your review is now live.</p>'; }
+  catch (x) { b.disabled = false; err.textContent = x.code === "already_reviewed" ? "You have already reviewed this piece." : x.code === "rate_limited" ? "Too many attempts. Please wait a few minutes." : "Could not submit your review. Please check the form and try again."; }
+});
+load();
+</script></body></html>
